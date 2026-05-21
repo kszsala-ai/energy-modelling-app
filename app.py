@@ -42,7 +42,7 @@ def calculate_heating_intensity(temp_c: float) -> float:
 
 def get_nearest_scenarios(data: pd.DataFrame, t: float, w: float, tr: float, r: float, top_n: int = 50) -> pd.DataFrame:
     """Find most similar scenarios using weighted Manhattan distance."""
-    scenario_heating = calculate_heating_intensity(t)
+    scenario_heating = max(5.0, min(100.0, 100 - ((t + 15) * 2.8)))
 
     # Normalize differences by feature ranges to make components comparable.
     dist = (
@@ -111,12 +111,8 @@ wind_speed = st.sidebar.slider("Wind speed [m/s]", 0.0, 12.0, float(defaults["wi
 traffic_intensity = st.sidebar.slider("Traffic intensity [%]", 0, 100, int(defaults["traffic_intensity"]))
 renewable_share = st.sidebar.slider("Renewable energy share [%]", 0, 60, int(defaults["renewable_share"]))
 
-# Defensive fallback: protects app execution if this function is accidentally removed during manual edits.
-if "calculate_heating_intensity" not in globals():
-    def calculate_heating_intensity(temp_c: float) -> float:
-        return max(5.0, min(100.0, 100 - ((temp_c + 15) * 2.8)))
-
-calculated_heating = calculate_heating_intensity(temperature)
+# Calculate heating directly from temperature to avoid runtime dependency issues.
+calculated_heating = max(5.0, min(100.0, 100 - ((temperature + 15) * 2.8)))
 st.sidebar.metric("Calculated heating intensity [%]", f"{calculated_heating:.1f}")
 st.sidebar.caption("Heating is automatically derived from temperature to avoid unrealistic system states.")
 
