@@ -99,11 +99,11 @@ if analyze:
 # ------------------------------
 if st.session_state.run_analysis:
     filtered_df = df[
-        (df["temperature"].between(temperature - 2, temperature + 2))
-        & (df["wind_speed"].between(wind_speed - 1, wind_speed + 1))
-        & (df["traffic_intensity"].between(traffic_intensity - 10, traffic_intensity + 10))
-        & (df["renewable_share"].between(renewable_share - 5, renewable_share + 5))
-        & (df["heating_intensity"].between(heating_intensity - 10, heating_intensity + 10))
+        (df["temperature"].between(temperature - 4, temperature + 4))
+        & (df["wind_speed"].between(wind_speed - 2, wind_speed + 2))
+        & (df["traffic_intensity"].between(traffic_intensity - 20, traffic_intensity + 20))
+        & (df["renewable_share"].between(renewable_share - 10, renewable_share + 10))
+        & (df["heating_intensity"].between(heating_intensity - 20, heating_intensity + 20))
     ].copy()
 else:
     filtered_df = pd.DataFrame(columns=df.columns)
