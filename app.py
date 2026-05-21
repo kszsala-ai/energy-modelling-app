@@ -4,24 +4,27 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-
 # ------------------------------
-# Page configuration and styling
+# Page configuration + lightweight styling
 # ------------------------------
-st.set_page_config(
-    page_title="Environmental-Energy Lab",
-    page_icon="🌍",
-    layout="wide",
-)
+st.set_page_config(page_title="Environmental-Energy Digital Twin", page_icon="🌍", layout="wide")
 
-st.title("🌍 Interactive Environmental-Energy System Simulator")
 st.markdown(
     """
-This educational app helps first-year Energy Engineering students explore how
-**temperature, heating, wind, traffic, and renewable energy share** influence
-**PM10 concentration** and **CO₂ emissions**.
-Use the sidebar to build a scenario, then analyze similar historical synthetic records.
-"""
+    <style>
+    .block-container {padding-top: 1.5rem; padding-bottom: 2rem;}
+    .subtitle {font-size: 1.05rem; color: #4A5568; margin-bottom: 1rem;}
+    .section-gap {margin-top: 1.2rem;}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.title("🌍 Educational Environmental-Energy Digital Twin")
+st.markdown(
+    '<div class="subtitle">A simplified decision-support simulator for first-year Energy Engineering students. '
+    "Change environmental conditions and observe system-level responses under uncertainty.</div>",
+    unsafe_allow_html=True,
 )
 
 
@@ -67,257 +70,203 @@ required_columns = [
     "smog_risk",
 ]
 
-missing_columns = [col for col in required_columns if col not in df.columns]
-if missing_columns:
-    st.error(f"Dataset is missing required columns: {', '.join(missing_columns)}")
+try:
+    df = load_data(DATA_FILE)
+except FileNotFoundError:
+    st.error(f"Dataset file '{DATA_FILE}' was not found. Place it next to app.py.")
+    st.stop()
+except Exception as exc:
+    st.error(f"Could not load dataset: {exc}")
     st.stop()
 
+missing = [col for col in required_columns if col not in df.columns]
+if missing:
+    st.error(f"Dataset is missing required columns: {', '.join(missing)}")
+    st.stop()
 
 # ------------------------------
-# Sidebar: scenario controls
+# Sidebar controls
 # ------------------------------
-st.sidebar.header("Scenario Inputs")
-st.sidebar.markdown("Adjust parameters and click **Analyze Scenario**.")
+predefined = {
+    "Custom": {"temperature": 0, "wind_speed": 3.0, "traffic_intensity": 50, "renewable_share": 25},
+    "Winter smog episode": {"temperature": -8, "wind_speed": 1.2, "traffic_intensity": 78, "renewable_share": 12},
+    "Summer clean air": {"temperature": 22, "wind_speed": 6.5, "traffic_intensity": 35, "renewable_share": 35},
+    "Energy transition": {"temperature": 6, "wind_speed": 4.0, "traffic_intensity": 45, "renewable_share": 55},
+    "High traffic urban day": {"temperature": 4, "wind_speed": 2.0, "traffic_intensity": 92, "renewable_share": 20},
+}
 
-temperature = st.sidebar.slider("Outdoor temperature (°C)", -15, 25, 0)
-wind_speed = st.sidebar.slider("Wind speed (m/s)", 0.0, 12.0, 3.0, 0.1)
-traffic_intensity = st.sidebar.slider("Traffic intensity", 0, 100, 50)
-renewable_share = st.sidebar.slider("Renewable energy share (%)", 0, 60, 25)
-heating_intensity = st.sidebar.slider("Heating intensity", 0, 100, 40)
+st.sidebar.header("Scenario Builder")
+scenario_name = st.sidebar.selectbox("Educational scenario", list(predefined.keys()))
+defaults = predefined[scenario_name]
+
+temperature = st.sidebar.slider("Outdoor temperature [°C]", -15, 25, int(defaults["temperature"]))
+wind_speed = st.sidebar.slider("Wind speed [m/s]", 0.0, 12.0, float(defaults["wind_speed"]), 0.1)
+traffic_intensity = st.sidebar.slider("Traffic intensity [%]", 0, 100, int(defaults["traffic_intensity"]))
+renewable_share = st.sidebar.slider("Renewable energy share [%]", 0, 60, int(defaults["renewable_share"]))
+
+calculated_heating = calculate_heating_intensity(temperature)
+st.sidebar.metric("Calculated heating intensity [%]", f"{calculated_heating:.1f}")
+st.sidebar.caption("Heating is automatically derived from temperature to avoid unrealistic system states.")
 
 analyze = st.sidebar.button("Analyze Scenario", type="primary")
 
 if "run_analysis" not in st.session_state:
     st.session_state.run_analysis = False
-
 if analyze:
     st.session_state.run_analysis = True
 
-
-# ------------------------------
-# Filtering logic
-# ------------------------------
+# Always produce similar scenarios once user starts analysis.
+filtered_df = pd.DataFrame(columns=df.columns)
 if st.session_state.run_analysis:
-    filtered_df = df[
-        (df["temperature"].between(temperature - 4, temperature + 4))
-        & (df["wind_speed"].between(wind_speed - 2, wind_speed + 2))
-        & (df["traffic_intensity"].between(traffic_intensity - 20, traffic_intensity + 20))
-        & (df["renewable_share"].between(renewable_share - 10, renewable_share + 10))
-        & (df["heating_intensity"].between(heating_intensity - 20, heating_intensity + 20))
-    ].copy()
-else:
-    filtered_df = pd.DataFrame(columns=df.columns)
-
-
-# ------------------------------
-# Main content
-# ------------------------------
-if not st.session_state.run_analysis:
-    st.info("Select inputs in the sidebar and click **Analyze Scenario** to start.")
-elif filtered_df.empty:
-    st.warning(
-        "No similar scenarios found for the selected ranges. Try broader or different values."
+    filtered_df = get_nearest_scenarios(
+        df,
+        t=float(temperature),
+        w=float(wind_speed),
+        tr=float(traffic_intensity),
+        r=float(renewable_share),
+        top_n=50,
     )
+
+if not st.session_state.run_analysis:
+    st.info("Choose inputs in the sidebar and click **Analyze Scenario** to run the digital twin.")
 else:
-    # ------------------------------
-    # KPI Section
-    # ------------------------------
     avg_pm10 = filtered_df["PM10"].mean()
     avg_co2 = filtered_df["CO2_emission"].mean()
     avg_energy = filtered_df["energy_demand"].mean()
-    dominant_risk = filtered_df["smog_risk"].mode().iloc[0]
+    dominant_risk = filtered_df["smog_risk"].mode().iloc[0] if not filtered_df["smog_risk"].mode().empty else "unknown"
+    smog_alert_days = int((filtered_df["PM10"] > 100).sum())
 
-    k1, k2, k3, k4 = st.columns(4)
-    k1.metric("Average PM10", f"{avg_pm10:.2f}")
-    k2.metric("Average CO₂ emission", f"{avg_co2:.2f}")
-    k3.metric("Average energy demand", f"{avg_energy:.2f}")
-    k4.metric("Dominant smog risk", f"{dominant_risk}")
+    k1, k2, k3, k4, k5 = st.columns(5)
+    k1.metric("Avg PM10 [µg/m³]", f"{avg_pm10:.1f}")
+    k2.metric("Avg CO₂ emission index", f"{avg_co2:.1f}")
+    k3.metric("Avg energy demand", f"{avg_energy:.1f}")
+    k4.metric("Dominant smog risk", str(dominant_risk).capitalize())
+    k5.metric("Smog alert days", f"{smog_alert_days} / {len(filtered_df)}")
 
-    # ------------------------------
-    # Smog risk warning box
-    # ------------------------------
     risk_colors = {
-        "low": ("#D4EDDA", "#155724"),
-        "moderate": ("#FFF3CD", "#856404"),
-        "high": ("#FFE8CC", "#8A4B08"),
-        "alarm": ("#F8D7DA", "#721C24"),
+        "low": ("#E6FFFA", "#065F46"),
+        "moderate": ("#FFF7D6", "#92400E"),
+        "high": ("#FFEDD5", "#9A3412"),
+        "alarm": ("#FEE2E2", "#991B1B"),
     }
-    bg, fg = risk_colors.get(str(dominant_risk).lower(), ("#E2E3E5", "#383D41"))
-
+    bg, fg = risk_colors.get(str(dominant_risk).lower(), ("#E5E7EB", "#1F2937"))
     st.markdown(
         f"""
-        <div style="padding: 1rem; border-radius: 0.6rem; background-color: {bg}; color: {fg}; border: 1px solid {fg};">
-            <b>Smog risk status:</b> {dominant_risk.capitalize()}<br>
-            Interpretation: The selected scenario is currently associated with a <b>{dominant_risk}</b> smog risk level.
-            Combine this with PM10 and CO₂ indicators below to assess environmental impact.
+        <div style="margin-top:0.8rem; margin-bottom:0.8rem; padding: 1rem 1.1rem; border-radius: 0.7rem;
+                    background-color: {bg}; color: {fg}; border-left: 8px solid {fg};">
+            <b>System smog status:</b> {str(dominant_risk).capitalize()}<br>
+            This estimate is based on the <b>50 most similar synthetic scenarios</b>, not exact matching.
+            It reflects uncertainty-aware environmental engineering reasoning.
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    st.markdown("### Visualizations")
+    st.markdown("### Scenario Similarity Diagnostics")
+    st.caption("Lower distance = stronger similarity to selected input conditions.")
+    st.plotly_chart(
+        px.histogram(filtered_df, x="similarity_distance", nbins=20, title="Distribution of similarity distances (50 nearest scenarios)"),
+        use_container_width=True,
+    )
 
+    st.markdown("### Visual Analytics")
     c1, c2 = st.columns(2)
-
     with c1:
-        fig_temp_pm10 = px.scatter(
-            filtered_df,
-            x="temperature",
-            y="PM10",
-            color="smog_risk",
-            title="A. Temperature vs PM10",
-            hover_data=["wind_speed", "heating_intensity", "traffic_intensity"],
+        st.plotly_chart(
+            px.scatter(filtered_df, x="temperature", y="PM10", color="smog_risk", size="traffic_intensity", title="A. Temperature vs PM10"),
+            use_container_width=True,
         )
-        st.plotly_chart(fig_temp_pm10, use_container_width=True)
-
     with c2:
-        fig_wind_pm10 = px.scatter(
-            filtered_df,
-            x="wind_speed",
-            y="PM10",
-            color="smog_risk",
-            title="B. Wind Speed vs PM10",
-            hover_data=["temperature", "heating_intensity", "traffic_intensity"],
+        st.plotly_chart(
+            px.scatter(filtered_df, x="wind_speed", y="PM10", color="smog_risk", size="heating_intensity", title="B. Wind speed vs PM10"),
+            use_container_width=True,
         )
-        st.plotly_chart(fig_wind_pm10, use_container_width=True)
 
-    # C. Monthly average PM10
-    monthly_pm10 = (
-        filtered_df.groupby("month", as_index=False)["PM10"].mean().sort_values("month")
+    monthly_pm10 = filtered_df.groupby("month", as_index=False)["PM10"].mean().sort_values("month")
+    st.plotly_chart(
+        px.line(monthly_pm10, x="month", y="PM10", markers=True, title="C. Monthly average PM10"),
+        use_container_width=True,
     )
-    fig_monthly = px.line(
-        monthly_pm10,
-        x="month",
-        y="PM10",
-        markers=True,
-        title="C. Monthly Average PM10",
-    )
-    st.plotly_chart(fig_monthly, use_container_width=True)
 
-    # D. Average PM10 by smog risk
     risk_pm10 = filtered_df.groupby("smog_risk", as_index=False)["PM10"].mean()
-    fig_risk = px.bar(
-        risk_pm10,
-        x="smog_risk",
-        y="PM10",
-        color="smog_risk",
-        title="D. Average PM10 by Smog Risk Category",
+    st.plotly_chart(
+        px.bar(risk_pm10, x="smog_risk", y="PM10", color="smog_risk", title="D. Average PM10 by smog risk category"),
+        use_container_width=True,
     )
-    st.plotly_chart(fig_risk, use_container_width=True)
 
-    # E. Correlation heatmap
-    corr_cols = [
-        "temperature",
-        "wind_speed",
-        "heating_intensity",
-        "traffic_intensity",
-        "renewable_share",
-        "PM10",
-        "CO2_emission",
-    ]
-    corr_matrix = filtered_df[corr_cols].corr(numeric_only=True)
+    corr_cols = ["temperature", "wind_speed", "heating_intensity", "traffic_intensity", "renewable_share", "PM10", "CO2_emission"]
+    corr = filtered_df[corr_cols].corr(numeric_only=True)
+    fig_heat = go.Figure(data=go.Heatmap(z=corr.values, x=corr.columns, y=corr.index, colorscale="RdBu", zmid=0))
+    fig_heat.update_layout(title="E. Correlation heatmap", height=600)
+    st.plotly_chart(fig_heat, use_container_width=True)
 
-    heatmap = go.Figure(
-        data=go.Heatmap(
-            z=corr_matrix.values,
-            x=corr_matrix.columns,
-            y=corr_matrix.index,
-            colorscale="RdBu",
-            zmid=0,
-            colorbar=dict(title="Correlation"),
-        )
-    )
-    heatmap.update_layout(title="E. Correlation Heatmap", height=550)
-    st.plotly_chart(heatmap, use_container_width=True)
-
-    # ------------------------------
-    # Automatic interpretation
-    # ------------------------------
-    st.markdown("### Automatic Interpretation")
-
-    interpretation_points = []
-
-    if temperature < 0:
-        interpretation_points.append(
-            "Low temperature likely increased heating demand, which can raise local PM10 concentration."
-        )
-    elif temperature > 15:
-        interpretation_points.append(
-            "Milder temperature conditions are usually linked with lower heating pressure and potentially lower PM10 from heating sources."
-        )
-
-    if wind_speed >= 6:
-        interpretation_points.append(
-            "Higher wind speed improved pollutant dispersion, which often helps reduce local PM10 accumulation."
-        )
-    elif wind_speed <= 2:
-        interpretation_points.append(
-            "Low wind speed limited dispersion, so pollutants can accumulate more easily near the ground."
-        )
-
+    st.markdown("### Engineering Interpretation Report")
+    lines = []
+    if temperature <= 0:
+        lines.append(f"- **Thermal driver:** Outdoor temperature ({temperature}°C) increased modeled heating intensity to **{calculated_heating:.1f}%**, elevating combustion pressure.")
+    else:
+        lines.append(f"- **Thermal driver:** Moderate temperature ({temperature}°C) reduced modeled heating intensity to **{calculated_heating:.1f}%**.")
+    if wind_speed <= 2.5:
+        lines.append(f"- **Dispersion driver:** Weak wind ({wind_speed:.1f} m/s) limited atmospheric mixing and favored PM10 accumulation.")
+    elif wind_speed >= 6:
+        lines.append(f"- **Dispersion driver:** Stronger wind ({wind_speed:.1f} m/s) improved pollutant dispersion and reduced stagnation risk.")
     if renewable_share >= 40:
-        interpretation_points.append(
-            "A higher renewable energy share is associated with lower local emissions and can support CO₂ reduction."
-        )
-    elif renewable_share <= 15:
-        interpretation_points.append(
-            "A low renewable share suggests stronger dependence on conventional fuels, which can increase emissions."
-        )
-
+        lines.append(f"- **Energy transition driver:** High renewable share ({renewable_share}%) lowered local-emission intensity in similar scenarios.")
+    else:
+        lines.append(f"- **Energy transition driver:** Renewable share ({renewable_share}%) indicates partial decarbonization potential; higher values generally improve outcomes.")
     if traffic_intensity >= 70:
-        interpretation_points.append(
-            "High traffic intensity likely contributed to higher PM10 levels through transport-related emissions and resuspension."
-        )
-    elif traffic_intensity <= 30:
-        interpretation_points.append(
-            "Lower traffic intensity reduces one of the key urban PM10 sources."
-        )
+        lines.append(f"- **Transport driver:** High traffic intensity ({traffic_intensity}%) was associated with increased PM10 burden in nearest analogues.")
+    else:
+        lines.append(f"- **Transport driver:** Traffic intensity ({traffic_intensity}%) remained a relevant but moderate PM10 contributor.")
+    lines.append(f"- **System summary:** Across the 50 nearest scenarios, mean PM10 = **{avg_pm10:.1f} µg/m³**, mean CO₂ index = **{avg_co2:.1f}**, smog-alert days = **{smog_alert_days}**.")
+    st.markdown("\n".join(lines))
 
-    if heating_intensity >= 70:
-        interpretation_points.append(
-            "High heating intensity can significantly increase combustion-related particulate emissions during colder periods."
-        )
-
-    if not interpretation_points:
-        interpretation_points.append(
-            "This scenario is balanced across major inputs; compare charts to identify which variable still has the strongest influence."
-        )
-
-    for point in interpretation_points:
-        st.markdown(f"- {point}")
-
-# ------------------------------
-# Educational and extra sections
-# ------------------------------
-with st.expander("How does the model work?"):
-    st.write(
+with st.expander("How does this environmental-energy model work?", expanded=False):
+    st.markdown(
         """
-        This app uses an **educational synthetic dataset** to simulate relationships between
-        environmental and energy-system variables.
+### A. What data are used?
+This app uses a **synthetic environmental-energy dataset** created for education. It represents interactions between:
+- weather conditions,
+- heating demand,
+- emissions,
+- air quality,
+- renewable energy transition.
 
-        - It is **not** a full physical or regulatory model.
-        - It simplifies cause-effect links (e.g., heating, traffic, and weather effects on PM10).
-        - Its purpose is to help students understand interactions between variables and practice
-          scenario-based reasoning.
+### B. Input variables (student-controlled)
+- **Outdoor temperature [°C]**: ambient atmospheric condition; lower values raise heating demand.
+- **Wind speed [m/s]**: proxy for atmospheric mixing; higher values typically improve pollutant dispersion.
+- **Traffic intensity [%]**: proxy for transport-related emissions and urban PM contributions.
+- **Renewable energy share [%]**: contribution of lower-emission energy sources in the local energy mix.
+
+### C. Calculated variables (model/system outputs)
+- **Heating intensity [%]**: automatically derived from temperature using a simplified engineering relationship.
+- **Local emission index [-]**: synthetic indicator of near-source emissions.
+- **PM10 concentration [µg/m³]**: particulate matter concentration used for air-quality interpretation.
+- **CO2 emission index [-]**: synthetic greenhouse-gas burden indicator.
+- **Energy demand [index]**: synthetic total demand pressure.
+- **Smog risk category [-]**: categorical risk class (low/moderate/high/alarm).
+
+### D. How the model works under uncertainty
+The app does **not** predict exact future values. Instead, it finds the **50 most similar scenarios** (nearest neighbors)
+in the synthetic dataset based on selected conditions and calculated heating demand. This mimics uncertainty-aware,
+probabilistic reasoning used in real environmental-energy decision-support systems.
         """
     )
 
-st.markdown("### Dataset Preview")
+st.markdown("### Dataset preview")
 st.dataframe(df.head(20), use_container_width=True)
 
-st.markdown("### Download Filtered Dataset")
-if not filtered_df.empty:
-    csv_data = filtered_df.to_csv(index=False).encode("utf-8")
+st.markdown("### Download filtered scenarios")
+if st.session_state.run_analysis and not filtered_df.empty:
     st.download_button(
-        label="Download filtered scenarios as CSV",
-        data=csv_data,
-        file_name="filtered_smog_energy_scenarios.csv",
+        label="Download 50 nearest scenarios as CSV",
+        data=filtered_df.to_csv(index=False).encode("utf-8"),
+        file_name="nearest_smog_energy_scenarios.csv",
         mime="text/csv",
     )
 else:
-    st.caption("Run analysis with matching scenarios to enable download.")
+    st.caption("Run scenario analysis to enable filtered dataset download.")
 
 show_stats = st.checkbox("Show raw statistics")
 if show_stats:
-    st.markdown("### Raw Statistics")
     st.dataframe(df.describe(include="all").transpose(), use_container_width=True)
