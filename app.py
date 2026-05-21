@@ -27,6 +27,17 @@ st.markdown(
 )
 
 
+
+
+# Centralized heating formula to keep merge conflict resolution simple and consistent.
+def heating_from_temperature(temp_c: float) -> float:
+    return max(5.0, min(100.0, 100 - ((temp_c + 15) * 2.8)))
+
+
+def calculate_heating_intensity(temperature: float) -> float:
+    """Backward-compatible alias for heating formula used in some merged/local variants."""
+    return heating_from_temperature(float(temperature))
+
 @st.cache_data
 def load_data(path: str) -> pd.DataFrame:
     """Load dataset and parse date column safely."""
@@ -35,14 +46,9 @@ def load_data(path: str) -> pd.DataFrame:
     return data
 
 
-def calculate_heating_intensity(temp_c: float) -> float:
-    """Educational heating-demand relation derived from outdoor temperature."""
-    return max(5.0, min(100.0, 100 - ((temp_c + 15) * 2.8)))
-
-
 def get_nearest_scenarios(data: pd.DataFrame, t: float, w: float, tr: float, r: float, top_n: int = 50) -> pd.DataFrame:
     """Find most similar scenarios using weighted Manhattan distance."""
-    scenario_heating = max(5.0, min(100.0, 100 - ((t + 15) * 2.8)))
+    scenario_heating = heating_from_temperature(t)
 
     # Normalize differences by feature ranges to make components comparable.
     dist = (
@@ -112,7 +118,7 @@ traffic_intensity = st.sidebar.slider("Traffic intensity [%]", 0, 100, int(defau
 renewable_share = st.sidebar.slider("Renewable energy share [%]", 0, 60, int(defaults["renewable_share"]))
 
 # Calculate heating directly from temperature to avoid runtime dependency issues.
-calculated_heating = max(5.0, min(100.0, 100 - ((temperature + 15) * 2.8)))
+calculated_heating = heating_from_temperature(float(temperature))
 st.sidebar.metric("Calculated heating intensity [%]", f"{calculated_heating:.1f}")
 st.sidebar.caption("Heating is automatically derived from temperature to avoid unrealistic system states.")
 
