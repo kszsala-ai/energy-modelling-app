@@ -30,37 +30,29 @@ st.markdown(
 
 @st.cache_data
 def load_data(path: str) -> pd.DataFrame:
-    """Load dataset and parse date column safely."""
-    data = pd.read_csv(path)
-    data["date"] = pd.to_datetime(data["date"], errors="coerce")
-    return data
+    """Load and preprocess the dataset."""
+    df = pd.read_csv(path)
+    # Parse dates safely; invalid entries become NaT.
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    return df
 
 
-def calculate_heating_intensity(temp_c: float) -> float:
-    """Educational heating-demand relation derived from outdoor temperature."""
-    return max(5.0, min(100.0, 100 - ((temp_c + 15) * 2.8)))
-
-
-def get_nearest_scenarios(data: pd.DataFrame, t: float, w: float, tr: float, r: float, top_n: int = 50) -> pd.DataFrame:
-    """Find most similar scenarios using weighted Manhattan distance."""
-    scenario_heating = calculate_heating_intensity(t)
-
-    # Normalize differences by feature ranges to make components comparable.
-    dist = (
-        (data["temperature"].sub(t).abs() / 40.0)
-        + (data["wind_speed"].sub(w).abs() / 12.0)
-        + (data["traffic_intensity"].sub(tr).abs() / 100.0)
-        + (data["renewable_share"].sub(r).abs() / 60.0)
-        + (data["heating_intensity"].sub(scenario_heating).abs() / 100.0)
-    )
-
-    out = data.copy()
-    out["similarity_distance"] = dist
-    out = out.nsmallest(min(top_n, len(out)), "similarity_distance").copy()
-    return out
-
-
+# ------------------------------
+# Data loading
+# ------------------------------
 DATA_FILE = "smog_energy_dataset.csv"
+
+try:
+    df = load_data(DATA_FILE)
+except FileNotFoundError:
+    st.error(
+        f"Dataset file '{DATA_FILE}' was not found. Place it in the same folder as app.py."
+    )
+    st.stop()
+except Exception as exc:
+    st.error(f"Could not load dataset: {exc}")
+    st.stop()
+
 required_columns = [
     "date",
     "year",
