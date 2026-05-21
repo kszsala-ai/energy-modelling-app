@@ -1,4 +1,3 @@
-import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -30,29 +29,37 @@ st.markdown(
 
 @st.cache_data
 def load_data(path: str) -> pd.DataFrame:
-    """Load and preprocess the dataset."""
-    df = pd.read_csv(path)
-    # Parse dates safely; invalid entries become NaT.
-    df["date"] = pd.to_datetime(df["date"], errors="coerce")
-    return df
+    """Load dataset and parse date column safely."""
+    data = pd.read_csv(path)
+    data["date"] = pd.to_datetime(data["date"], errors="coerce")
+    return data
 
 
-# ------------------------------
-# Data loading
-# ------------------------------
-DATA_FILE = "smog_energy_dataset.csv"
+def calculate_heating_intensity(temp_c: float) -> float:
+    """Educational heating-demand relation derived from outdoor temperature."""
+    return max(5.0, min(100.0, 100 - ((temp_c + 15) * 2.8)))
 
-try:
-    df = load_data(DATA_FILE)
-except FileNotFoundError:
-    st.error(
-        f"Dataset file '{DATA_FILE}' was not found. Place it in the same folder as app.py."
+
+def get_nearest_scenarios(data: pd.DataFrame, t: float, w: float, tr: float, r: float, top_n: int = 50) -> pd.DataFrame:
+    """Find most similar scenarios using weighted Manhattan distance."""
+    scenario_heating = calculate_heating_intensity(t)
+
+    # Normalize differences by feature ranges to make components comparable.
+    dist = (
+        (data["temperature"].sub(t).abs() / 40.0)
+        + (data["wind_speed"].sub(w).abs() / 12.0)
+        + (data["traffic_intensity"].sub(tr).abs() / 100.0)
+        + (data["renewable_share"].sub(r).abs() / 60.0)
+        + (data["heating_intensity"].sub(scenario_heating).abs() / 100.0)
     )
-    st.stop()
-except Exception as exc:
-    st.error(f"Could not load dataset: {exc}")
-    st.stop()
 
+    out = data.copy()
+    out["similarity_distance"] = dist
+    out = out.nsmallest(min(top_n, len(out)), "similarity_distance").copy()
+    return out
+
+
+DATA_FILE = "smog_energy_dataset.csv"
 required_columns = [
     "date",
     "year",
@@ -103,6 +110,11 @@ temperature = st.sidebar.slider("Outdoor temperature [°C]", -15, 25, int(defaul
 wind_speed = st.sidebar.slider("Wind speed [m/s]", 0.0, 12.0, float(defaults["wind_speed"]), 0.1)
 traffic_intensity = st.sidebar.slider("Traffic intensity [%]", 0, 100, int(defaults["traffic_intensity"]))
 renewable_share = st.sidebar.slider("Renewable energy share [%]", 0, 60, int(defaults["renewable_share"]))
+
+# Defensive fallback: protects app execution if this function is accidentally removed during manual edits.
+if "calculate_heating_intensity" not in globals():
+    def calculate_heating_intensity(temp_c: float) -> float:
+        return max(5.0, min(100.0, 100 - ((temp_c + 15) * 2.8)))
 
 calculated_heating = calculate_heating_intensity(temperature)
 st.sidebar.metric("Calculated heating intensity [%]", f"{calculated_heating:.1f}")
@@ -245,6 +257,14 @@ This app uses a **synthetic environmental-energy dataset** created for education
 - **CO2 emission index [-]**: synthetic greenhouse-gas burden indicator.
 - **Energy demand [index]**: synthetic total demand pressure.
 - **Smog risk category [-]**: categorical risk class (low/moderate/high/alarm).
+
+### Privacy and telemetry note
+Streamlit may collect anonymous usage statistics at the platform level. If needed, you can disable it in:
+`~/.streamlit/config.toml` with:
+```toml
+[browser]
+gatherUsageStats = false
+```
 
 ### D. How the model works under uncertainty
 The app does **not** predict exact future values. Instead, it finds the **50 most similar scenarios** (nearest neighbors)
