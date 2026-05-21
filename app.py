@@ -38,6 +38,9 @@ def calculate_heating_intensity(temperature: float) -> float:
     """Backward-compatible alias for heating formula used in some merged/local variants."""
     return heating_from_temperature(float(temperature))
 
+if not callable(calculate_heating_intensity):
+    raise RuntimeError("calculate_heating_intensity is not callable. Resolve merge conflicts in app.py.")
+
 @st.cache_data
 def load_data(path: str) -> pd.DataFrame:
     """Load dataset and parse date column safely."""
@@ -118,7 +121,7 @@ traffic_intensity = st.sidebar.slider("Traffic intensity [%]", 0, 100, int(defau
 renewable_share = st.sidebar.slider("Renewable energy share [%]", 0, 60, int(defaults["renewable_share"]))
 
 # Calculate heating directly from temperature to avoid runtime dependency issues.
-calculated_heating = heating_from_temperature(float(temperature))
+calculated_heating = calculate_heating_intensity(float(temperature))
 st.sidebar.metric("Calculated heating intensity [%]", f"{calculated_heating:.1f}")
 st.sidebar.caption("Heating is automatically derived from temperature to avoid unrealistic system states.")
 
