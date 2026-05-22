@@ -116,9 +116,9 @@ def build_report_pdf(context: dict) -> bytes:
         ax.text(0.03, y, "KPI summary", fontsize=12, fontweight='bold')
         y -= 0.02
         kpi_lines = [
-            f"Estimated PM10 concentration: {context['avg_pm10']:.1f} µg/m³",
-            f"CO₂ emission index: {context['avg_co2']:.1f}",
-            f"Energy demand index: {context['avg_energy']:.1f}",
+            f"Estimated PM10 concentration: {context['avg_pm10']:.1f} µg/m³ | {context['kpi_interp_pm10']}",
+            f"CO₂ emission index: {context['avg_co2']:.1f} | {context['kpi_interp_co2']}",
+            f"Energy demand index: {context['avg_energy']:.1f} | {context['kpi_interp_energy']}",
             f"Smog risk category: {str(context['risk']).capitalize()}",
             f"Days exceeding PM10 limit: {context['pm10_exceed']} / 35",
         ]
@@ -130,6 +130,10 @@ def build_report_pdf(context: dict) -> bytes:
         ax.text(0.03, y, "Engineering interpretation", fontsize=12, fontweight='bold')
         y -= 0.025
         ax.text(0.05, y, context['eng_sentence'], fontsize=10, wrap=True)
+        y -= 0.04
+        ax.text(0.03, y, "Concise engineering summary", fontsize=12, fontweight='bold')
+        y -= 0.025
+        ax.text(0.05, y, context['eng_summary'], fontsize=10, wrap=True)
 
         ax.text(0.03, 0.02, "Educational environmental-energy simulator | Synthetic dataset for teaching purposes only", fontsize=8)
         pdf.savefig(fig, bbox_inches='tight')
@@ -145,6 +149,16 @@ def build_report_pdf(context: dict) -> bytes:
             img = plt.imread(BytesIO(img_bytes), format='png')
             ax.imshow(img)
             ax.text(0.03, 0.02, "Educational environmental-energy simulator | Synthetic dataset for teaching purposes only", fontsize=8, transform=ax.transAxes)
+            pdf.savefig(fig, bbox_inches='tight')
+            plt.close(fig)
+
+        # comparison + final page tasks + summary
+        if context.get("comparison_text"):
+            fig, ax = plt.subplots(figsize=(8.27, 11.69))
+            ax.axis('off')
+            ax.text(0.03, 0.97, "Scenario comparison implications", fontsize=14, fontweight='bold', va='top')
+            ax.text(0.05, 0.92, context["comparison_text"], fontsize=10, wrap=True)
+            ax.text(0.03, 0.02, "Educational environmental-energy simulator | Synthetic dataset for teaching purposes only", fontsize=8)
             pdf.savefig(fig, bbox_inches='tight')
             plt.close(fig)
 
@@ -202,6 +216,24 @@ def send_report_email(receiver: str, pdf_bytes: bytes) -> tuple[bool, str]:
         return True, "Report sent successfully."
     except Exception as exc:
         return False, f"Email sending failed: {exc}"
+
+
+def safe_pct_change(ref: float, new: float) -> float:
+    if ref == 0:
+        return 0.0
+    return ((new - ref) / abs(ref)) * 100.0
+
+
+def validate_interpretation(text: str) -> tuple[bool, str]:
+    keywords = {"wind", "heating", "emission", "emissions", "renewable", "pm10", "dispersion", "traffic", "co2"}
+    words = [w.strip(".,;:!?()[]{}\"\'").lower() for w in (text or "").split()]
+    wc = len([w for w in words if w])
+    hits = sum(1 for w in words if w in keywords)
+    if wc < 20:
+        return False, "Interpretation is too short (minimum 20 words)."
+    if hits < 2:
+        return False, "Interpretation should reference environmental mechanisms (e.g., wind, heating, emissions, renewable, PM10, dispersion)."
+    return True, "Interpretation quality check passed."
 DATA_FILE = "smog_energy_dataset.csv"
 required_columns = [
     "date", "year", "month", "temperature", "wind_speed", "heating_intensity",
@@ -498,13 +530,45 @@ with tab6:
             st.metric("Smog risk", str(rs['risk']).capitalize())
             st.metric("Exceedance days", f"{rs['exceed']} / 35")
 
-        if st.button("Check ADVANCED task"):
-            if right_vals["renewable_share"] > left_vals["renewable_share"] and rs["CO2"] <= ls["CO2"]:
-                st.success("✅ Task completed: higher renewable share is associated with reduced CO₂ burden in the compared scenario.")
-            else:
-                st.warning("⚠ Try comparing a low-renewable scenario with a higher-renewable scenario and inspect CO₂ response.")
+        pm10_diff = safe_pct_change(ls["PM10"], rs["PM10"])
+        co2_diff = safe_pct_change(ls["CO2"], rs["CO2"])
+        energy_diff = safe_pct_change(ls["energy"], rs["energy"])
+        exceed_diff = rs["exceed"] - ls["exceed"]
 
+        st.markdown("##### Comparison diagnostics")
+        d1, d2, d3, d4 = st.columns(4)
+        d1.metric("PM10 difference [%]", f"{pm10_diff:+.1f}%")
+        d2.metric("CO₂ difference [%]", f"{co2_diff:+.1f}%")
+        d3.metric("Demand difference [%]", f"{energy_diff:+.1f}%")
+        d4.metric("Exceedance-day difference", f"{exceed_diff:+d}")
+
+        score = 0
+        score += 1 if rs["PM10"] < 50 else 0
+        score += 1 if rs["CO2"] < ls["CO2"] else 0
+        score += 1 if rs["energy"] <= 70 else 0
+        score += 1 if rs["exceed"] < ls["exceed"] else 0
+        score += 1 if right_vals["renewable_share"] > left_vals["renewable_share"] else 0
+        st.metric("Scenario sustainability score (RIGHT vs LEFT)", f"{score} / 5")
+
+        preferred = st.radio("Which scenario is environmentally preferable?", [f"LEFT: {left_name}", f"RIGHT: {right_name}"], horizontal=True)
         adv_note = st.text_area("What does this comparison show about renewable transition and air quality?", key="adv_note")
+
+        if st.button("Check ADVANCED task"):
+            valid_text, valid_msg = validate_interpretation(adv_note)
+            better_right = score >= 3
+            student_right = preferred.startswith("RIGHT")
+            if not valid_text:
+                st.warning(f"⚠ {valid_msg}")
+            elif (better_right and student_right) or ((not better_right) and (not student_right)):
+                st.success("✅ Task completed: your choice and interpretation are consistent with multi-criteria sustainability assessment.")
+                if "wind" in adv_note.lower() or "dispersion" in adv_note.lower():
+                    st.info("Engineering feedback: your interpretation correctly considered meteorological dispersion effects.")
+                elif "heating" in adv_note.lower() or "pm10" in adv_note.lower():
+                    st.info("Engineering feedback: good link between heating demand and PM10 response.")
+                else:
+                    st.info("Engineering feedback: expand mechanistic explanation (wind, heating, emissions, renewables).")
+            else:
+                st.warning("⚠ Scenario choice does not match multi-criteria evidence. Reassess PM10, CO₂, demand, exceedance days, and renewable share together.")
         with st.expander("Hint / example interpretation (ADVANCED)"):
             st.markdown("Example: The scenario with higher renewable share showed lower CO₂ pressure; PM10 also depended strongly on wind and heating conditions.")
 
@@ -561,8 +625,22 @@ with tab6:
         task_rows = [
             ["Basic: low PM10", "Completed" if avg_pm10 < 35 else "Not completed", basic_note or "(no student note)"],
             ["Intermediate: PM10<50 and demand<=70", "Completed" if (avg_pm10 < 50 and avg_energy <= 70) else "Not completed", inter_note or "(no student note)"],
-            ["Advanced: renewable transition comparison", "Completed" if ('ls' in locals() and 'rs' in locals() and right_vals['renewable_share'] > left_vals['renewable_share'] and rs['CO2'] <= ls['CO2']) else "Not completed", adv_note or "(no student note)"],
+            ["Advanced: renewable transition comparison", "Completed" if (score >= 3 and validate_interpretation(adv_note)[0]) else "Not completed", adv_note or "(no student note)"],
         ]
+
+        kpi_interp_pm10 = "Elevated PM10 concentration indicates intensified local-emission accumulation." if avg_pm10 >= 50 else "Lower PM10 suggests improved dispersion and/or reduced emission pressure."
+        kpi_interp_co2 = "Moderate CO₂ index reflects partial renewable-energy contribution." if avg_co2 < df["CO2_emission"].median() else "Higher CO₂ index indicates stronger conventional-energy burden."
+        kpi_interp_energy = "Demand remains high due to increased heating requirements." if avg_energy > 70 else "Energy demand remains in a moderate operating range."
+        eng_summary = (
+            "The analyzed scenario represents moderate environmental-pressure conditions. "
+            "Low wind speed can increase pollutant accumulation tendency, while renewable-energy contribution may partially reduce emission burden. "
+            "System response reflects interacting meteorological and anthropogenic drivers."
+        )
+        comparison_text = (
+            f"Compared to {left_name}, {right_name} changed PM10 by {pm10_diff:+.1f}%, CO₂ by {co2_diff:+.1f}%, "
+            f"energy demand by {energy_diff:+.1f}%, and exceedance days by {exceed_diff:+d}. "
+            "This comparison demonstrates environmental trade-offs: improving one KPI does not always optimize the full system response."
+        )
 
         pdf_context = {
             "date_str": datetime.now().strftime("%Y-%m-%d %H:%M"),
@@ -578,6 +656,11 @@ with tab6:
             "risk": dominant_risk,
             "pm10_exceed": pm10_exceed_days,
             "eng_sentence": eng_sentence,
+            "eng_summary": eng_summary,
+            "kpi_interp_pm10": kpi_interp_pm10,
+            "kpi_interp_co2": kpi_interp_co2,
+            "kpi_interp_energy": kpi_interp_energy,
+            "comparison_text": comparison_text,
             "chart_images": chart_images,
             "task_rows": task_rows,
             "auto_lines": auto_lines,
