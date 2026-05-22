@@ -275,44 +275,129 @@ with tab5:
         st.plotly_chart(px.bar(corr, orientation="h", title=f"What most influences {output_var} in this dataset?", labels={"value":"|correlation|", "index":"variable"}), use_container_width=True)
 
 with tab6:
-    st.markdown("### Interactive student tasks")
+    st.markdown("### Interactive laboratory tasks")
+    st.markdown("Use the sidebar controls to manipulate conditions, then complete guided engineering tasks below.")
+
     if not st.session_state.run_analysis:
-        st.warning("Run scenario first.")
+        st.info("Step 1: Set scenario controls in the sidebar and click **Analyze Decision Scenario**. Then return to this tab.")
     else:
         avg_pm10 = filtered_df["PM10"].mean()
         avg_co2 = filtered_df["CO2_emission"].mean()
         avg_energy = filtered_df["energy_demand"].mean()
         dominant_risk = filtered_df["smog_risk"].mode().iloc[0]
+        pm10_exceed_days = int((filtered_df["PM10"] > 50).sum())
 
-        st.markdown("#### TASK 1")
-        st.write("Reduce PM10 below 35 µg/m³ while renewable share ≤ 40% and energy demand ≤ 70")
-        if st.button("Check Task 1"):
-            if avg_pm10 < 35 and renewable_share <= 40 and avg_energy <= 70:
-                st.success("✅ Successful environmental mitigation strategy")
-            elif avg_pm10 < 35 and avg_energy > 70:
-                st.warning("⚠ PM10 reduced, but energy demand exceeded threshold")
+        # ---------------- Basic ----------------
+        st.markdown("#### 🟢 BASIC TASK — Identify low PM10 conditions")
+        st.markdown("Goal: Find conditions that produce **estimated PM10 response below 35 µg/m³**.")
+        if st.button("Check BASIC task"):
+            if avg_pm10 < 35:
+                st.success("✅ Task completed: estimated PM10 response is below 35 µg/m³.")
+                st.info("Engineering feedback: low PM10 often appears with better dispersion and/or lower emission pressure.")
             else:
-                st.warning("⚠ Task conditions not met")
+                st.warning("⚠ Not yet completed. Try increasing wind speed, reducing traffic intensity, or improving renewable share.")
 
-        st.markdown("#### TASK 2")
-        st.write("Reduce CO₂ emissions without increasing smog risk")
-        if st.button("Check Task 2"):
-            if avg_co2 < df["CO2_emission"].median() and str(dominant_risk).lower() in ["low","moderate"]:
-                st.success("✅ CO₂ reduced with controlled smog risk")
-            else:
-                st.warning("⚠ CO₂ and smog-risk target not yet achieved")
+        basic_note = st.text_area("What environmental changes improved air quality?", key="basic_note")
+        with st.expander("Hint / example interpretation (BASIC)"):
+            st.markdown("Example: Higher wind speed improved pollutant dispersion, while lower traffic reduced particulate emission pressure.")
 
-        st.markdown("#### TASK 3")
-        st.write("Find conditions producing HIGH smog risk")
-        if st.button("Check Task 3"):
-            if str(dominant_risk).lower() == "high":
-                st.success("✅ High smog risk identified")
+        # ---------------- Intermediate ----------------
+        st.markdown("#### 🟠 INTERMEDIATE TASK — Reduce PM10 with moderate demand")
+        st.markdown("Goal: Keep **PM10 < 50 µg/m³** while maintaining **energy demand ≤ 70**.")
+        if st.button("Check INTERMEDIATE task"):
+            if avg_pm10 < 50 and avg_energy <= 70:
+                st.success("✅ Task completed: PM10 is below the EU daily threshold and energy demand remains moderate.")
+            elif avg_pm10 < 50 and avg_energy > 70:
+                st.warning("⚠ PM10 target met, but energy demand exceeded the limit.")
             else:
-                st.warning("⚠ Current scenario is not high risk")
+                st.warning("⚠ Task not completed yet. Explore temperature, wind, and traffic combinations.")
+
+        inter_note = st.text_area("How did you balance air quality and energy demand?", key="inter_note")
+        with st.expander("Hint / example interpretation (INTERMEDIATE)"):
+            st.markdown("Example: Mild temperature and stronger wind reduced PM10, while avoiding very high heating demand kept system load moderate.")
+
+        # ---------------- Advanced ----------------
+        st.markdown("#### 🔵 ADVANCED TASK — Scenario comparison and renewable transition")
+        st.markdown("Goal: Compare two scenarios side-by-side and interpret how renewable-energy transition changes environmental response.")
+
+        preset_names = list(predefined.keys())
+        left_name = st.selectbox("LEFT scenario", preset_names, index=preset_names.index("Winter smog episode") if "Winter smog episode" in preset_names else 0)
+        right_name = st.selectbox("RIGHT scenario", preset_names, index=preset_names.index("Summer clean air") if "Summer clean air" in preset_names else 0)
+
+        left_vals = predefined[left_name]
+        right_vals = predefined[right_name]
+
+        left_df = get_nearest_scenarios(df, float(left_vals["temperature"]), float(left_vals["wind_speed"]), float(left_vals["traffic_intensity"]), float(left_vals["renewable_share"]), 50)
+        right_df = get_nearest_scenarios(df, float(right_vals["temperature"]), float(right_vals["wind_speed"]), float(right_vals["traffic_intensity"]), float(right_vals["renewable_share"]), 50)
+
+        def summarize(d):
+            return {
+                "PM10": d["PM10"].mean(),
+                "CO2": d["CO2_emission"].mean(),
+                "energy": d["energy_demand"].mean(),
+                "risk": d["smog_risk"].mode().iloc[0],
+                "exceed": int((d["PM10"] > 50).sum()),
+            }
+
+        ls, rs = summarize(left_df), summarize(right_df)
+        col_l, col_r = st.columns(2)
+        with col_l:
+            st.markdown(f"##### LEFT: {left_name}")
+            st.metric("PM10 [µg/m³]", f"{ls['PM10']:.1f}")
+            st.metric("CO₂ index [-]", f"{ls['CO2']:.1f}")
+            st.metric("Energy demand [0–100]", f"{ls['energy']:.1f}")
+            st.metric("Smog risk", str(ls['risk']).capitalize())
+            st.metric("Exceedance days", f"{ls['exceed']} / 35")
+
+        with col_r:
+            st.markdown(f"##### RIGHT: {right_name}")
+            st.metric("PM10 [µg/m³]", f"{rs['PM10']:.1f}")
+            st.metric("CO₂ index [-]", f"{rs['CO2']:.1f}")
+            st.metric("Energy demand [0–100]", f"{rs['energy']:.1f}")
+            st.metric("Smog risk", str(rs['risk']).capitalize())
+            st.metric("Exceedance days", f"{rs['exceed']} / 35")
+
+        if st.button("Check ADVANCED task"):
+            if right_vals["renewable_share"] > left_vals["renewable_share"] and rs["CO2"] <= ls["CO2"]:
+                st.success("✅ Task completed: higher renewable share is associated with reduced CO₂ burden in the compared scenario.")
+            else:
+                st.warning("⚠ Try comparing a low-renewable scenario with a higher-renewable scenario and inspect CO₂ response.")
+
+        adv_note = st.text_area("What does this comparison show about renewable transition and air quality?", key="adv_note")
+        with st.expander("Hint / example interpretation (ADVANCED)"):
+            st.markdown("Example: The scenario with higher renewable share showed lower CO₂ pressure; PM10 also depended strongly on wind and heating conditions.")
+
+        st.markdown("#### Automatic educational summary")
+        auto_lines = [
+            "Changing conditions modifies the whole environmental-energy system response.",
+            "Lower wind speed can increase pollution accumulation.",
+            "Higher heating demand can intensify local emissions during colder conditions.",
+            "Higher renewable-energy share can reduce environmental burden, especially CO₂ pressure.",
+        ]
+        for line in auto_lines:
+            st.markdown(f"- {line}")
 
         st.markdown("#### Generate classroom report")
-        student_note = st.text_area("Student conclusions")
-        report = f"""# Classroom report\n\nScenario: {scenario_name}\n- Temperature: {temperature} °C\n- Wind speed: {wind_speed} m/s\n- Traffic intensity: {traffic_intensity} %\n- Renewable share: {renewable_share} %\n\nOutcomes:\n- PM10: {avg_pm10:.1f} µg/m³\n- CO2 index: {avg_co2:.1f}\n- Energy demand: {avg_energy:.1f}\n- Smog risk: {dominant_risk}\n\nInterpretation:\n""" + "\n".join([f"- {i}" for i in interp]) + f"\n\nStudent conclusions:\n{student_note}\n"
+        report = f"""# Classroom report
+
+Active scenario (sidebar): {scenario_name}
+- Temperature: {temperature} °C
+- Wind speed: {wind_speed} m/s
+- Traffic intensity: {traffic_intensity} %
+- Renewable share: {renewable_share} %
+
+Estimated environmental response:
+- PM10: {avg_pm10:.1f} µg/m³
+- CO2 index: {avg_co2:.1f}
+- Energy demand: {avg_energy:.1f}
+- Smog risk: {dominant_risk}
+- PM10 exceedance days: {pm10_exceed_days} / 35
+
+Student conclusions:
+BASIC: {basic_note}
+INTERMEDIATE: {inter_note}
+ADVANCED: {adv_note}
+"""
         st.download_button("Download classroom report (.md)", data=report, file_name="classroom_report.md", mime="text/markdown")
 
 st.caption("Educational note: synthetic dataset + simplified environmental-engineering logic for classroom reasoning.")
