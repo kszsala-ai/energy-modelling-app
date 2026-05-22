@@ -83,108 +83,67 @@ def _fig_to_png_bytes(fig) -> bytes:
 
 
 def build_report_pdf(context: dict) -> bytes:
-    """Generate multi-page educational report PDF using matplotlib PdfPages."""
+    """Generate concise 2-page educational scenario summary PDF."""
     out = BytesIO()
     with PdfPages(out) as pdf:
-        # Page 1: title + conditions + KPI summary
+        # PAGE 1: scenario summary
         fig, ax = plt.subplots(figsize=(8.27, 11.69))
         ax.axis("off")
-        y = 0.97
-        ax.text(0.5, y, "Environmental-Energy System Analysis Report", ha="center", va="top", fontsize=18, fontweight="bold")
-        y -= 0.04
-        ax.text(0.5, y, "Interactive Educational Digital Twin for Environmental Engineering", ha="center", va="top", fontsize=11)
-        y -= 0.04
-        ax.text(0.03, y, f"Generation date: {context['date_str']}", fontsize=10)
-        y -= 0.02
-        ax.text(0.03, y, f"Scenario: {context['scenario_name']}", fontsize=10)
-
+        y = 0.96
+        ax.text(0.5, y, "Environmental-Energy Scenario Summary", ha="center", va="top", fontsize=18, fontweight="bold")
         y -= 0.05
-        ax.text(0.03, y, "Current environmental-energy conditions", fontsize=12, fontweight='bold')
-        y -= 0.02
-        cond_lines = [
+
+        ax.text(0.03, y, "Selected Environmental Conditions", fontsize=13, fontweight="bold")
+        y -= 0.03
+        for line in [
             f"Outdoor temperature: {context['temperature']} °C",
             f"Wind speed: {context['wind_speed']} m/s",
             f"Traffic intensity: {context['traffic_intensity']} %",
             f"Renewable energy share: {context['renewable_share']} %",
-            f"Calculated heating intensity: {context['heating']:.1f} %",
-        ]
-        for line in cond_lines:
+            f"Heating intensity: {context['heating']:.1f} %",
+        ]:
             ax.text(0.05, y, f"• {line}", fontsize=10)
-            y -= 0.022
+            y -= 0.024
 
         y -= 0.02
-        ax.text(0.03, y, "KPI summary", fontsize=12, fontweight='bold')
-        y -= 0.02
-        kpi_lines = [
-            f"Estimated PM10 concentration: {context['avg_pm10']:.1f} µg/m³ | {context['kpi_interp_pm10']}",
-            f"CO₂ emission index: {context['avg_co2']:.1f} | {context['kpi_interp_co2']}",
-            f"Energy demand index: {context['avg_energy']:.1f} | {context['kpi_interp_energy']}",
+        ax.text(0.03, y, "Calculated Indicators", fontsize=13, fontweight="bold")
+        y -= 0.03
+        for line in [
+            f"Estimated PM10 concentration: {context['avg_pm10']:.1f} µg/m³",
+            f"CO emission index: {context['avg_co2']:.1f}",
+            f"Energy demand index: {context['avg_energy']:.1f}",
             f"Smog risk category: {str(context['risk']).capitalize()}",
-            f"Days exceeding PM10 limit: {context['pm10_exceed']} / 35",
-        ]
-        for line in kpi_lines:
+        ]:
             ax.text(0.05, y, f"• {line}", fontsize=10)
-            y -= 0.022
+            y -= 0.024
 
         y -= 0.02
-        ax.text(0.03, y, "Engineering interpretation", fontsize=12, fontweight='bold')
-        y -= 0.025
-        ax.text(0.05, y, context['eng_sentence'], fontsize=10, wrap=True)
-        y -= 0.04
-        ax.text(0.03, y, "Concise engineering summary", fontsize=12, fontweight='bold')
-        y -= 0.025
-        ax.text(0.05, y, context['eng_summary'], fontsize=10, wrap=True)
+        ax.text(0.03, y, "Student Tasks", fontsize=13, fontweight="bold")
+        y -= 0.03
+        for row in context['task_rows']:
+            ax.text(0.05, y, f"• {row[0]}: {row[1]}", fontsize=10)
+            y -= 0.024
+
+        y -= 0.02
+        ax.text(0.03, y, "Student Interpretation", fontsize=13, fontweight="bold")
+        y -= 0.03
+        student_text = context.get('student_interpretation', '').strip() or 'No student interpretation provided.'
+        ax.text(0.05, y, student_text, fontsize=10, wrap=True)
 
         ax.text(0.03, 0.02, "Educational environmental-energy simulator | Synthetic dataset for teaching purposes only", fontsize=8)
         pdf.savefig(fig, bbox_inches='tight')
         plt.close(fig)
 
-        # chart pages
-        for title, img_bytes in context['chart_images']:
-            if not img_bytes:
-                continue
-            fig, ax = plt.subplots(figsize=(8.27, 11.69))
-            ax.axis('off')
-            ax.text(0.5, 0.98, title, ha='center', va='top', fontsize=13, fontweight='bold')
-            img = plt.imread(BytesIO(img_bytes), format='png')
-            ax.imshow(img)
-            ax.text(0.03, 0.02, "Educational environmental-energy simulator | Synthetic dataset for teaching purposes only", fontsize=8, transform=ax.transAxes)
-            pdf.savefig(fig, bbox_inches='tight')
-            plt.close(fig)
-
-        # comparison + final page tasks + summary
-        if context.get("comparison_text"):
-            fig, ax = plt.subplots(figsize=(8.27, 11.69))
-            ax.axis('off')
-            ax.text(0.03, 0.97, "Scenario comparison implications", fontsize=14, fontweight='bold', va='top')
-            ax.text(0.05, 0.92, context["comparison_text"], fontsize=10, wrap=True)
-            ax.text(0.03, 0.02, "Educational environmental-energy simulator | Synthetic dataset for teaching purposes only", fontsize=8)
-            pdf.savefig(fig, bbox_inches='tight')
-            plt.close(fig)
-
-        # final page tasks + summary
+        # PAGE 2: rule-based interpretation
         fig, ax = plt.subplots(figsize=(8.27, 11.69))
         ax.axis('off')
-        y = 0.97
-        ax.text(0.03, y, "Student tasks and interpretations", fontsize=14, fontweight='bold', va='top')
-        y -= 0.04
-        for row in context['task_rows']:
-            ax.text(0.03, y, f"Task: {row[0]}", fontsize=10, fontweight='bold')
-            y -= 0.02
-            ax.text(0.05, y, f"Result: {row[1]}", fontsize=10)
-            y -= 0.02
-            ax.text(0.05, y, f"Student interpretation: {row[2]}", fontsize=10, wrap=True)
-            y -= 0.04
+        y = 0.96
+        ax.text(0.5, y, "Engineering Interpretation", ha='center', va='top', fontsize=18, fontweight='bold')
+        y -= 0.06
+        for bullet in context['rule_based_points'][:6]:
+            ax.text(0.05, y, f"• {bullet}", fontsize=11)
+            y -= 0.045
 
-        y -= 0.01
-        ax.text(0.03, y, "Automatic educational summary", fontsize=12, fontweight='bold')
-        y -= 0.025
-        for line in context['auto_lines']:
-            ax.text(0.05, y, f"• {line}", fontsize=10)
-            y -= 0.022
-
-        y -= 0.02
-        ax.text(0.03, y, "Dataset note: synthetic data (2021–2023), daily resolution, nearest-scenario estimation under uncertainty.", fontsize=9)
         ax.text(0.03, 0.02, "Educational environmental-energy simulator | Synthetic dataset for teaching purposes only", fontsize=8)
         pdf.savefig(fig, bbox_inches='tight')
         plt.close(fig)
@@ -589,38 +548,6 @@ with tab6:
             else "Estimated environmental response reflects interacting weather, traffic, heating, and renewable-energy conditions."
         )
 
-        # Build chart images safely for PDF export.
-        chart_images = []
-        try:
-            fig1, ax1 = plt.subplots(figsize=(6.5, 3.4))
-            filtered_df.groupby("month")["PM10"].mean().sort_index().plot(kind="bar", ax=ax1)
-            ax1.set_title("PM10 monthly averages (nearest scenarios)")
-            ax1.set_xlabel("Month")
-            ax1.set_ylabel("PM10 [µg/m³]")
-            chart_images.append(("PM10 trends", _fig_to_png_bytes(fig1)))
-        except Exception:
-            chart_images.append(("PM10 trends", b""))
-
-        try:
-            fig2, ax2 = plt.subplots(figsize=(6.5, 3.4))
-            ax2.scatter(filtered_df["temperature"], filtered_df["PM10"], s=18)
-            ax2.set_title("Temperature vs PM10")
-            ax2.set_xlabel("Temperature [°C]")
-            ax2.set_ylabel("PM10 [µg/m³]")
-            chart_images.append(("Temperature vs PM10", _fig_to_png_bytes(fig2)))
-        except Exception:
-            chart_images.append(("Temperature vs PM10", b""))
-
-        try:
-            fig3, ax3 = plt.subplots(figsize=(6.5, 3.4))
-            labels = ["LEFT", "RIGHT"]
-            values = [ls["PM10"], rs["PM10"]] if 'ls' in locals() and 'rs' in locals() else [avg_pm10, avg_pm10]
-            ax3.bar(labels, values)
-            ax3.set_title("Scenario comparison: PM10")
-            ax3.set_ylabel("PM10 [µg/m³]")
-            chart_images.append(("Scenario comparison", _fig_to_png_bytes(fig3)))
-        except Exception:
-            chart_images.append(("Scenario comparison", b""))
 
         task_rows = [
             ["Basic: low PM10", "Completed" if avg_pm10 < 35 else "Not completed", basic_note or "(no student note)"],
@@ -628,19 +555,21 @@ with tab6:
             ["Advanced: renewable transition comparison", "Completed" if (score >= 3 and validate_interpretation(adv_note)[0]) else "Not completed", adv_note or "(no student note)"],
         ]
 
-        kpi_interp_pm10 = "Elevated PM10 concentration indicates intensified local-emission accumulation." if avg_pm10 >= 50 else "Lower PM10 suggests improved dispersion and/or reduced emission pressure."
-        kpi_interp_co2 = "Moderate CO₂ index reflects partial renewable-energy contribution." if avg_co2 < df["CO2_emission"].median() else "Higher CO₂ index indicates stronger conventional-energy burden."
-        kpi_interp_energy = "Demand remains high due to increased heating requirements." if avg_energy > 70 else "Energy demand remains in a moderate operating range."
-        eng_summary = (
-            "The analyzed scenario represents moderate environmental-pressure conditions. "
-            "Low wind speed can increase pollutant accumulation tendency, while renewable-energy contribution may partially reduce emission burden. "
-            "System response reflects interacting meteorological and anthropogenic drivers."
-        )
-        comparison_text = (
-            f"Compared to {left_name}, {right_name} changed PM10 by {pm10_diff:+.1f}%, CO₂ by {co2_diff:+.1f}%, "
-            f"energy demand by {energy_diff:+.1f}%, and exceedance days by {exceed_diff:+d}. "
-            "This comparison demonstrates environmental trade-offs: improving one KPI does not always optimize the full system response."
-        )
+        rule_based_points = []
+        if wind_speed <= 2.5:
+            rule_based_points.append("Low wind speed increased pollutant accumulation tendency.")
+        elif wind_speed >= 6:
+            rule_based_points.append("Higher wind speed improved atmospheric dispersion conditions.")
+        if calculated_heating >= 60:
+            rule_based_points.append("Increased heating demand intensified PM10 formation risk.")
+        if renewable_share >= 40:
+            rule_based_points.append("Higher renewable-energy share reduced conventional-emission burden.")
+        if traffic_intensity >= 70:
+            rule_based_points.append("Traffic intensity contributed to elevated environmental pressure.")
+        if temperature <= 0:
+            rule_based_points.append("Low outdoor temperature increased heating-related environmental burden.")
+        if not rule_based_points:
+            rule_based_points.append("Estimated response reflects balanced environmental and energy-system conditions.")
 
         pdf_context = {
             "date_str": datetime.now().strftime("%Y-%m-%d %H:%M"),
@@ -656,12 +585,8 @@ with tab6:
             "risk": dominant_risk,
             "pm10_exceed": pm10_exceed_days,
             "eng_sentence": eng_sentence,
-            "eng_summary": eng_summary,
-            "kpi_interp_pm10": kpi_interp_pm10,
-            "kpi_interp_co2": kpi_interp_co2,
-            "kpi_interp_energy": kpi_interp_energy,
-            "comparison_text": comparison_text,
-            "chart_images": chart_images,
+            "student_interpretation": "BASIC: " + (basic_note or "") + "\nINTERMEDIATE: " + (inter_note or "") + "\nADVANCED: " + (adv_note or ""),
+            "rule_based_points": rule_based_points,
             "task_rows": task_rows,
             "auto_lines": auto_lines,
         }
