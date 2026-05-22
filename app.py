@@ -1,6 +1,7 @@
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+import statsmodels as sm
 
 # ------------------------------
 # Page config + engineering visual style
