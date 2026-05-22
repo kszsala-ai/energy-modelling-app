@@ -1,6 +1,18 @@
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+import re
+import smtplib
+from datetime import datetime
+from email.message import EmailMessage
+from io import BytesIO
+
+import matplotlib.pyplot as plt
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.units import cm
+from reportlab.platypus import Image, SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
 
 st.set_page_config(page_title="Environmental-Energy Decision Laboratory", page_icon="⚙️", layout="wide")
 
@@ -61,6 +73,129 @@ def risk_style(risk: str):
     return mapper.get(str(risk).lower(), ("#E2E8F0", "#334155"))
 
 
+
+
+def is_valid_email(email: str) -> bool:
+    return bool(re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email or ""))
+
+
+def _fig_to_png_bytes(fig) -> bytes:
+    buf = BytesIO()
+    fig.savefig(buf, format="png", dpi=140, bbox_inches="tight")
+    plt.close(fig)
+    return buf.getvalue()
+
+
+def build_report_pdf(context: dict) -> bytes:
+    """Generate multi-page educational environmental-engineering report PDF."""
+    out = BytesIO()
+    doc = SimpleDocTemplate(out, pagesize=A4, topMargin=1.2*cm, bottomMargin=1.2*cm)
+    styles = getSampleStyleSheet()
+    story = []
+
+    story.append(Paragraph("Environmental-Energy System Analysis Report", styles["Title"]))
+    story.append(Paragraph("Interactive Educational Digital Twin for Environmental Engineering", styles["Heading3"]))
+    story.append(Spacer(1, 0.4*cm))
+    story.append(Paragraph(f"Generation date: {context['date_str']}", styles["Normal"]))
+    story.append(Paragraph(f"Scenario: {context['scenario_name']}", styles["Normal"]))
+    story.append(Spacer(1, 0.4*cm))
+
+    cond_table = Table([
+        ["Parameter", "Value", "Unit"],
+        ["Outdoor temperature", f"{context['temperature']}", "°C"],
+        ["Wind speed", f"{context['wind_speed']}", "m/s"],
+        ["Traffic intensity", f"{context['traffic_intensity']}", "%"],
+        ["Renewable energy share", f"{context['renewable_share']}", "%"],
+        ["Calculated heating intensity", f"{context['heating']:.1f}", "%"],
+    ], colWidths=[7*cm, 4*cm, 3*cm])
+    cond_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+    ]))
+    story.append(Paragraph("Current environmental-energy conditions", styles["Heading2"]))
+    story.append(cond_table)
+    story.append(Spacer(1, 0.4*cm))
+
+    kpi_table = Table([
+        ["Indicator", "Estimated value"],
+        ["PM10 concentration [µg/m³]", f"{context['avg_pm10']:.1f}"],
+        ["CO₂ emission index [-]", f"{context['avg_co2']:.1f}"],
+        ["Energy demand index [0–100]", f"{context['avg_energy']:.1f}"],
+        ["Smog risk category", str(context['risk']).capitalize()],
+        ["Days exceeding PM10 limit", f"{context['pm10_exceed']} / 35"],
+    ], colWidths=[9*cm, 5*cm])
+    kpi_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+    ]))
+    story.append(kpi_table)
+    story.append(Spacer(1, 0.3*cm))
+    story.append(Paragraph(context['eng_sentence'], styles["Normal"]))
+    story.append(PageBreak())
+
+    story.append(Paragraph("Charts", styles["Heading2"]))
+    for title, img_bytes in context['chart_images']:
+        if not img_bytes:
+            continue
+        story.append(Paragraph(title, styles["Heading3"]))
+        img = Image(BytesIO(img_bytes), width=16*cm, height=9*cm)
+        story.append(img)
+        story.append(Spacer(1, 0.2*cm))
+
+    story.append(PageBreak())
+    story.append(Paragraph("Student tasks and interpretations", styles["Heading2"]))
+    task_rows = [["Task", "Result", "Student interpretation"]] + context['task_rows']
+    tasks = Table(task_rows, colWidths=[5*cm, 3*cm, 7*cm])
+    tasks.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+    ]))
+    story.append(tasks)
+    story.append(Spacer(1, 0.3*cm))
+    story.append(Paragraph("Automatic educational summary", styles["Heading3"]))
+    for line in context['auto_lines']:
+        story.append(Paragraph(f"• {line}", styles["Normal"]))
+    story.append(Spacer(1, 0.3*cm))
+    story.append(Paragraph("Dataset note: synthetic data (2021–2023), daily resolution, nearest-scenario estimation under uncertainty.", styles["Italic"]))
+
+    def footer(canvas, _doc):
+        canvas.saveState()
+        canvas.setFont("Helvetica", 8)
+        canvas.drawString(1.2*cm, 0.7*cm, "Educational environmental-energy simulator | Synthetic dataset for teaching purposes only")
+        canvas.restoreState()
+
+    doc.build(story, onFirstPage=footer, onLaterPages=footer)
+    out.seek(0)
+    return out.read()
+
+
+def send_report_email(receiver: str, pdf_bytes: bytes) -> tuple[bool, str]:
+    import os
+    host = os.getenv("SMTP_HOST")
+    port = int(os.getenv("SMTP_PORT", "587"))
+    user = os.getenv("SMTP_USER")
+    pwd = os.getenv("SMTP_PASS")
+    sender = os.getenv("SMTP_FROM", user or "")
+    if not all([host, user, pwd, sender]):
+        return False, "Email sending unavailable: set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM environment variables."
+    try:
+        msg = EmailMessage()
+        msg["Subject"] = "Environmental-Energy System Analysis Report"
+        msg["From"] = sender
+        msg["To"] = receiver
+        msg.set_content("Attached: generated educational environmental-energy report.")
+        msg.add_attachment(pdf_bytes, maintype="application", subtype="pdf", filename="environmental_report.pdf")
+        with smtplib.SMTP(host, port, timeout=20) as server:
+            server.starttls()
+            server.login(user, pwd)
+            server.send_message(msg)
+        return True, "Report sent successfully."
+    except Exception as exc:
+        return False, f"Email sending failed: {exc}"
 DATA_FILE = "smog_energy_dataset.csv"
 required_columns = [
     "date", "year", "month", "temperature", "wind_speed", "heating_intensity",
@@ -377,27 +512,83 @@ with tab6:
         for line in auto_lines:
             st.markdown(f"- {line}")
 
-        st.markdown("#### Generate classroom report")
-        report = f"""# Classroom report
+        st.markdown("#### Generate Environmental Report")
+        eng_sentence = (
+            "Low wind speed and increased heating demand contributed to elevated PM10 concentration."
+            if wind_speed <= 2.5 and calculated_heating >= 60
+            else "Estimated environmental response reflects interacting weather, traffic, heating, and renewable-energy conditions."
+        )
 
-Active scenario (sidebar): {scenario_name}
-- Temperature: {temperature} °C
-- Wind speed: {wind_speed} m/s
-- Traffic intensity: {traffic_intensity} %
-- Renewable share: {renewable_share} %
+        # Build chart images safely for PDF export.
+        chart_images = []
+        try:
+            fig1, ax1 = plt.subplots(figsize=(6.5, 3.4))
+            filtered_df.groupby("month")["PM10"].mean().sort_index().plot(kind="bar", ax=ax1)
+            ax1.set_title("PM10 monthly averages (nearest scenarios)")
+            ax1.set_xlabel("Month")
+            ax1.set_ylabel("PM10 [µg/m³]")
+            chart_images.append(("PM10 trends", _fig_to_png_bytes(fig1)))
+        except Exception:
+            chart_images.append(("PM10 trends", b""))
 
-Estimated environmental response:
-- PM10: {avg_pm10:.1f} µg/m³
-- CO2 index: {avg_co2:.1f}
-- Energy demand: {avg_energy:.1f}
-- Smog risk: {dominant_risk}
-- PM10 exceedance days: {pm10_exceed_days} / 35
+        try:
+            fig2, ax2 = plt.subplots(figsize=(6.5, 3.4))
+            ax2.scatter(filtered_df["temperature"], filtered_df["PM10"], s=18)
+            ax2.set_title("Temperature vs PM10")
+            ax2.set_xlabel("Temperature [°C]")
+            ax2.set_ylabel("PM10 [µg/m³]")
+            chart_images.append(("Temperature vs PM10", _fig_to_png_bytes(fig2)))
+        except Exception:
+            chart_images.append(("Temperature vs PM10", b""))
 
-Student conclusions:
-BASIC: {basic_note}
-INTERMEDIATE: {inter_note}
-ADVANCED: {adv_note}
-"""
-        st.download_button("Download classroom report (.md)", data=report, file_name="classroom_report.md", mime="text/markdown")
+        try:
+            fig3, ax3 = plt.subplots(figsize=(6.5, 3.4))
+            labels = ["LEFT", "RIGHT"]
+            values = [ls["PM10"], rs["PM10"]] if 'ls' in locals() and 'rs' in locals() else [avg_pm10, avg_pm10]
+            ax3.bar(labels, values)
+            ax3.set_title("Scenario comparison: PM10")
+            ax3.set_ylabel("PM10 [µg/m³]")
+            chart_images.append(("Scenario comparison", _fig_to_png_bytes(fig3)))
+        except Exception:
+            chart_images.append(("Scenario comparison", b""))
+
+        task_rows = [
+            ["Basic: low PM10", "Completed" if avg_pm10 < 35 else "Not completed", basic_note or "(no student note)"],
+            ["Intermediate: PM10<50 and demand<=70", "Completed" if (avg_pm10 < 50 and avg_energy <= 70) else "Not completed", inter_note or "(no student note)"],
+            ["Advanced: renewable transition comparison", "Completed" if ('ls' in locals() and 'rs' in locals() and right_vals['renewable_share'] > left_vals['renewable_share'] and rs['CO2'] <= ls['CO2']) else "Not completed", adv_note or "(no student note)"],
+        ]
+
+        pdf_context = {
+            "date_str": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "scenario_name": scenario_name,
+            "temperature": temperature,
+            "wind_speed": wind_speed,
+            "traffic_intensity": traffic_intensity,
+            "renewable_share": renewable_share,
+            "heating": calculated_heating,
+            "avg_pm10": avg_pm10,
+            "avg_co2": avg_co2,
+            "avg_energy": avg_energy,
+            "risk": dominant_risk,
+            "pm10_exceed": pm10_exceed_days,
+            "eng_sentence": eng_sentence,
+            "chart_images": chart_images,
+            "task_rows": task_rows,
+            "auto_lines": auto_lines,
+        }
+        pdf_bytes = build_report_pdf(pdf_context)
+        st.download_button("Download Environmental Report (PDF)", data=pdf_bytes, file_name="environmental_report.pdf", mime="application/pdf")
+
+        st.markdown("##### Send report by email")
+        mail_to = st.text_input("Recipient email", placeholder="student@example.com")
+        if st.button("Send Report to Email"):
+            if not is_valid_email(mail_to):
+                st.warning("Please enter a valid email address.")
+            else:
+                ok, msg = send_report_email(mail_to, pdf_bytes)
+                if ok:
+                    st.success(msg)
+                else:
+                    st.warning(msg)
 
 st.caption("Educational note: synthetic dataset + simplified environmental-engineering logic for classroom reasoning.")
