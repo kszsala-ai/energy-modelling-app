@@ -1,7 +1,6 @@
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-import statsmodels as sm
 
 # ------------------------------
 # Page config + engineering visual style
@@ -230,28 +229,28 @@ with tab2:
 with tab3:
     st.markdown("### A. Temperature vs Heating Demand")
     st.plotly_chart(
-        px.scatter(df, x="temperature", y="heating_intensity", trendline="ols", color_discrete_sequence=["#60A5FA"], title="Colder weather tends to increase heating demand"),
+        px.scatter(df, x="temperature", y="heating_intensity", color_discrete_sequence=["#60A5FA"], title="Colder weather tends to increase heating demand"),
         use_container_width=True,
     )
     st.caption("Engineering interpretation: in this synthetic system, lower outdoor temperature increases heating intensity and fuel-related emission pressure.")
 
     st.markdown("### B. Wind Speed vs PM10")
     st.plotly_chart(
-        px.scatter(df, x="wind_speed", y="PM10", trendline="ols", color_discrete_sequence=["#F59E0B"], title="Wind supports pollutant dispersion"),
+        px.scatter(df, x="wind_speed", y="PM10", color_discrete_sequence=["#F59E0B"], title="Wind supports pollutant dispersion"),
         use_container_width=True,
     )
     st.caption("Engineering interpretation: weak wind conditions often coincide with PM10 accumulation near ground level.")
 
     st.markdown("### C. Renewable Share vs CO₂")
     st.plotly_chart(
-        px.scatter(df, x="renewable_share", y="CO2_emission", trendline="ols", color_discrete_sequence=["#34D399"], title="Renewables and CO₂ relationship"),
+        px.scatter(df, x="renewable_share", y="CO2_emission", color_discrete_sequence=["#34D399"], title="Renewables and CO₂ relationship"),
         use_container_width=True,
     )
     st.caption("Engineering interpretation: larger renewable share is generally associated with lower CO₂ emission index.")
 
     st.markdown("### D. Traffic Intensity vs PM10")
     st.plotly_chart(
-        px.scatter(df, x="traffic_intensity", y="PM10", trendline="ols", color_discrete_sequence=["#FB7185"], title="Traffic contribution to PM10"),
+        px.scatter(df, x="traffic_intensity", y="PM10", color_discrete_sequence=["#FB7185"], title="Traffic contribution to PM10"),
         use_container_width=True,
     )
     st.caption("Engineering interpretation: traffic pressure contributes to particulate burden, especially with poor dispersion conditions.")
