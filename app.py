@@ -8,11 +8,7 @@ from email.message import EmailMessage
 from io import BytesIO
 
 import matplotlib.pyplot as plt
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib.units import cm
-from reportlab.platypus import Image, SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+from matplotlib.backends.backend_pdf import PdfPages
 
 st.set_page_config(page_title="Environmental-Energy Decision Laboratory", page_icon="⚙️", layout="wide")
 
@@ -87,88 +83,98 @@ def _fig_to_png_bytes(fig) -> bytes:
 
 
 def build_report_pdf(context: dict) -> bytes:
-    """Generate multi-page educational environmental-engineering report PDF."""
+    """Generate multi-page educational report PDF using matplotlib PdfPages."""
     out = BytesIO()
-    doc = SimpleDocTemplate(out, pagesize=A4, topMargin=1.2*cm, bottomMargin=1.2*cm)
-    styles = getSampleStyleSheet()
-    story = []
+    with PdfPages(out) as pdf:
+        # Page 1: title + conditions + KPI summary
+        fig, ax = plt.subplots(figsize=(8.27, 11.69))
+        ax.axis("off")
+        y = 0.97
+        ax.text(0.5, y, "Environmental-Energy System Analysis Report", ha="center", va="top", fontsize=18, fontweight="bold")
+        y -= 0.04
+        ax.text(0.5, y, "Interactive Educational Digital Twin for Environmental Engineering", ha="center", va="top", fontsize=11)
+        y -= 0.04
+        ax.text(0.03, y, f"Generation date: {context['date_str']}", fontsize=10)
+        y -= 0.02
+        ax.text(0.03, y, f"Scenario: {context['scenario_name']}", fontsize=10)
 
-    story.append(Paragraph("Environmental-Energy System Analysis Report", styles["Title"]))
-    story.append(Paragraph("Interactive Educational Digital Twin for Environmental Engineering", styles["Heading3"]))
-    story.append(Spacer(1, 0.4*cm))
-    story.append(Paragraph(f"Generation date: {context['date_str']}", styles["Normal"]))
-    story.append(Paragraph(f"Scenario: {context['scenario_name']}", styles["Normal"]))
-    story.append(Spacer(1, 0.4*cm))
+        y -= 0.05
+        ax.text(0.03, y, "Current environmental-energy conditions", fontsize=12, fontweight='bold')
+        y -= 0.02
+        cond_lines = [
+            f"Outdoor temperature: {context['temperature']} °C",
+            f"Wind speed: {context['wind_speed']} m/s",
+            f"Traffic intensity: {context['traffic_intensity']} %",
+            f"Renewable energy share: {context['renewable_share']} %",
+            f"Calculated heating intensity: {context['heating']:.1f} %",
+        ]
+        for line in cond_lines:
+            ax.text(0.05, y, f"• {line}", fontsize=10)
+            y -= 0.022
 
-    cond_table = Table([
-        ["Parameter", "Value", "Unit"],
-        ["Outdoor temperature", f"{context['temperature']}", "°C"],
-        ["Wind speed", f"{context['wind_speed']}", "m/s"],
-        ["Traffic intensity", f"{context['traffic_intensity']}", "%"],
-        ["Renewable energy share", f"{context['renewable_share']}", "%"],
-        ["Calculated heating intensity", f"{context['heating']:.1f}", "%"],
-    ], colWidths=[7*cm, 4*cm, 3*cm])
-    cond_table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-    ]))
-    story.append(Paragraph("Current environmental-energy conditions", styles["Heading2"]))
-    story.append(cond_table)
-    story.append(Spacer(1, 0.4*cm))
+        y -= 0.02
+        ax.text(0.03, y, "KPI summary", fontsize=12, fontweight='bold')
+        y -= 0.02
+        kpi_lines = [
+            f"Estimated PM10 concentration: {context['avg_pm10']:.1f} µg/m³",
+            f"CO₂ emission index: {context['avg_co2']:.1f}",
+            f"Energy demand index: {context['avg_energy']:.1f}",
+            f"Smog risk category: {str(context['risk']).capitalize()}",
+            f"Days exceeding PM10 limit: {context['pm10_exceed']} / 35",
+        ]
+        for line in kpi_lines:
+            ax.text(0.05, y, f"• {line}", fontsize=10)
+            y -= 0.022
 
-    kpi_table = Table([
-        ["Indicator", "Estimated value"],
-        ["PM10 concentration [µg/m³]", f"{context['avg_pm10']:.1f}"],
-        ["CO₂ emission index [-]", f"{context['avg_co2']:.1f}"],
-        ["Energy demand index [0–100]", f"{context['avg_energy']:.1f}"],
-        ["Smog risk category", str(context['risk']).capitalize()],
-        ["Days exceeding PM10 limit", f"{context['pm10_exceed']} / 35"],
-    ], colWidths=[9*cm, 5*cm])
-    kpi_table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-    ]))
-    story.append(kpi_table)
-    story.append(Spacer(1, 0.3*cm))
-    story.append(Paragraph(context['eng_sentence'], styles["Normal"]))
-    story.append(PageBreak())
+        y -= 0.02
+        ax.text(0.03, y, "Engineering interpretation", fontsize=12, fontweight='bold')
+        y -= 0.025
+        ax.text(0.05, y, context['eng_sentence'], fontsize=10, wrap=True)
 
-    story.append(Paragraph("Charts", styles["Heading2"]))
-    for title, img_bytes in context['chart_images']:
-        if not img_bytes:
-            continue
-        story.append(Paragraph(title, styles["Heading3"]))
-        img = Image(BytesIO(img_bytes), width=16*cm, height=9*cm)
-        story.append(img)
-        story.append(Spacer(1, 0.2*cm))
+        ax.text(0.03, 0.02, "Educational environmental-energy simulator | Synthetic dataset for teaching purposes only", fontsize=8)
+        pdf.savefig(fig, bbox_inches='tight')
+        plt.close(fig)
 
-    story.append(PageBreak())
-    story.append(Paragraph("Student tasks and interpretations", styles["Heading2"]))
-    task_rows = [["Task", "Result", "Student interpretation"]] + context['task_rows']
-    tasks = Table(task_rows, colWidths=[5*cm, 3*cm, 7*cm])
-    tasks.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-    ]))
-    story.append(tasks)
-    story.append(Spacer(1, 0.3*cm))
-    story.append(Paragraph("Automatic educational summary", styles["Heading3"]))
-    for line in context['auto_lines']:
-        story.append(Paragraph(f"• {line}", styles["Normal"]))
-    story.append(Spacer(1, 0.3*cm))
-    story.append(Paragraph("Dataset note: synthetic data (2021–2023), daily resolution, nearest-scenario estimation under uncertainty.", styles["Italic"]))
+        # chart pages
+        for title, img_bytes in context['chart_images']:
+            if not img_bytes:
+                continue
+            fig, ax = plt.subplots(figsize=(8.27, 11.69))
+            ax.axis('off')
+            ax.text(0.5, 0.98, title, ha='center', va='top', fontsize=13, fontweight='bold')
+            img = plt.imread(BytesIO(img_bytes), format='png')
+            ax.imshow(img)
+            ax.text(0.03, 0.02, "Educational environmental-energy simulator | Synthetic dataset for teaching purposes only", fontsize=8, transform=ax.transAxes)
+            pdf.savefig(fig, bbox_inches='tight')
+            plt.close(fig)
 
-    def footer(canvas, _doc):
-        canvas.saveState()
-        canvas.setFont("Helvetica", 8)
-        canvas.drawString(1.2*cm, 0.7*cm, "Educational environmental-energy simulator | Synthetic dataset for teaching purposes only")
-        canvas.restoreState()
+        # final page tasks + summary
+        fig, ax = plt.subplots(figsize=(8.27, 11.69))
+        ax.axis('off')
+        y = 0.97
+        ax.text(0.03, y, "Student tasks and interpretations", fontsize=14, fontweight='bold', va='top')
+        y -= 0.04
+        for row in context['task_rows']:
+            ax.text(0.03, y, f"Task: {row[0]}", fontsize=10, fontweight='bold')
+            y -= 0.02
+            ax.text(0.05, y, f"Result: {row[1]}", fontsize=10)
+            y -= 0.02
+            ax.text(0.05, y, f"Student interpretation: {row[2]}", fontsize=10, wrap=True)
+            y -= 0.04
 
-    doc.build(story, onFirstPage=footer, onLaterPages=footer)
+        y -= 0.01
+        ax.text(0.03, y, "Automatic educational summary", fontsize=12, fontweight='bold')
+        y -= 0.025
+        for line in context['auto_lines']:
+            ax.text(0.05, y, f"• {line}", fontsize=10)
+            y -= 0.022
+
+        y -= 0.02
+        ax.text(0.03, y, "Dataset note: synthetic data (2021–2023), daily resolution, nearest-scenario estimation under uncertainty.", fontsize=9)
+        ax.text(0.03, 0.02, "Educational environmental-energy simulator | Synthetic dataset for teaching purposes only", fontsize=8)
+        pdf.savefig(fig, bbox_inches='tight')
+        plt.close(fig)
+
     out.seek(0)
     return out.read()
 
