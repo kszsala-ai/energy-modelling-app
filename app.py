@@ -103,12 +103,92 @@ st.title("Environmental-Energy Teaching Laboratory")
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Introduction", "Dataset & Variables", "Environmental Relationships", "Decision Laboratory", "Model Interpretation", "Student Tasks"])
 
 with tab1:
-    st.markdown("### Interactive educational digital twin")
-    st.info("Synthetic dataset, uncertainty-aware nearest-scenario estimation, simplified environmental-energy cause-effect reasoning.")
-    c1,c2,c3 = st.columns(3)
-    c1.markdown("<div class='lab-card'><b>🌡 Conditions</b><br><span class='soft'>Weather + energy mix inputs</span></div>", unsafe_allow_html=True)
-    c2.markdown("<div class='lab-card'><b>🏭 Response</b><br><span class='soft'>PM10, CO₂, demand, smog risk</span></div>", unsafe_allow_html=True)
-    c3.markdown("<div class='lab-card'><b>🧭 Decisions</b><br><span class='soft'>Interpret and compare scenarios</span></div>", unsafe_allow_html=True)
+    st.markdown("### Educational Environmental-Energy System Simulator")
+    st.markdown(
+        """
+        <div class='lab-card'>
+        <b>Project description.</b><br>
+        This application presents a simplified environmental-energy system simulator designed for educational purposes.
+        The system demonstrates how meteorological conditions, heating demand, traffic intensity, and renewable energy
+        transition may influence air quality and energy-system behavior.
+        It operates on a synthetic dataset and uses nearest-scenario estimation instead of deterministic forecasting.
+        The goal is to support systems thinking and environmental-engineering reasoning.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("### Dataset Characteristics")
+    c1, c2 = st.columns([1.2, 1])
+    with c1:
+        st.markdown(
+            """
+            <div class='lab-card'>
+            <ul>
+              <li>Synthetic environmental-energy dataset created for educational use.</li>
+              <li>Period: <b>2021–2023</b>.</li>
+              <li>Temporal resolution: <b>daily</b> (1 record per day).</li>
+              <li>Simplified representation of environmental-energy interactions.</li>
+            </ul>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with c2:
+        st.markdown(
+            """
+            <div class='lab-card'>
+            <b>The dataset simulates:</b>
+            <ul>
+              <li>seasonal temperature variability,</li>
+              <li>heating demand changes,</li>
+              <li>urban pollution episodes,</li>
+              <li>renewable energy transition,</li>
+              <li>air-quality responses.</li>
+            </ul>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    var_table = pd.DataFrame([
+        ["Outdoor temperature", "°C", "Ambient atmospheric temperature affecting heating demand."],
+        ["Wind speed", "m/s", "Atmospheric mixing and pollutant dispersion conditions."],
+        ["Traffic intensity", "%", "Transport-related emission pressure in the urban system."],
+        ["Renewable energy share", "%", "Estimated contribution of low-emission energy sources."],
+        ["Heating intensity", "%", "Calculated thermal-demand pressure linked to outdoor temperature."],
+        ["PM10 concentration", "µg/m³", "Estimated airborne particulate matter concentration."],
+        ["CO₂ emission index", "-", "Simplified greenhouse-gas emission pressure indicator."],
+        ["Energy demand index", "0–100", "Simplified total energy-system demand level."],
+        ["Smog risk category", "-", "Categorical air-quality risk level (low/moderate/high/alarm)."],
+    ], columns=["Variable", "Unit", "Meaning"])
+
+    st.markdown("### Variable guide")
+    st.dataframe(var_table, use_container_width=True, hide_index=True)
+
+    st.markdown("### How does the system respond?")
+    st.markdown(
+        """
+        <div class='lab-card'>
+        <b>STEP 1</b> Environmental conditions are selected (weather, traffic, renewable-energy conditions)<br>
+        ↓<br>
+        <b>STEP 2</b> The system estimates heating demand<br>
+        ↓<br>
+        <b>STEP 3</b> The application identifies the most similar historical/synthetic scenarios<br>
+        ↓<br>
+        <b>STEP 4</b> Estimated environmental response is generated:
+        PM10 concentration, CO₂ emissions, energy demand, smog risk.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("### Why similar scenarios instead of exact predictions?")
+    st.info(
+        "Real environmental systems operate under uncertainty. Predictive systems rarely know exact future values. "
+        "Many environmental-AI tools search for similar historical situations and estimate a typical response. "
+        "This laboratory follows the same idea: it estimates environmental response from nearest scenarios rather than deterministic forecasts."
+    )
 
 with tab2:
     st.markdown("### Variables")
@@ -163,15 +243,16 @@ with tab4:
         avg_co2 = filtered_df["CO2_emission"].mean()
         avg_energy = filtered_df["energy_demand"].mean()
         dominant_risk = filtered_df["smog_risk"].mode().iloc[0]
-        smog_alert_days = int((filtered_df["PM10"] > 100).sum())
+        pm10_exceed_days = int((filtered_df["PM10"] > 50).sum())
         c1,c2,c3,c4,c5 = st.columns(5)
         c1.metric("PM10 concentration [µg/m³]", f"{avg_pm10:.1f}")
         c2.metric("CO₂ emission index [-]", f"{avg_co2:.1f}")
         c3.metric("Energy demand index [0–100]", f"{avg_energy:.1f}")
         c4.metric("Smog risk category", str(dominant_risk).capitalize())
-        c5.metric("Estimated winter smog-alert days [days/year]", f"{smog_alert_days}")
+        c5.metric("Days exceeding PM10 daily limit", f"{pm10_exceed_days} / 35")
         bg, fg = risk_style(dominant_risk)
-        st.markdown(f"<div class='risk-box' style='background:{bg}; border-color:{fg}; color:{fg};'><b>Decision summary:</b> based on 50 nearest synthetic scenarios.</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='risk-box' style='background:{bg}; border-color:{fg}; color:{fg};'><b>Estimated environmental response:</b> based on 50 nearest synthetic scenarios.</div>", unsafe_allow_html=True)
+        st.caption("According to EU air-quality regulations, daily PM10 concentration above 50 µg/m³ should not occur more than 35 times per year.")
         interp=[]
         interp.append(f"Heating intensity responds to temperature ({temperature}°C → {calculated_heating:.1f}%).")
         interp.append("High wind improves dispersion." if wind_speed >= 6 else "Low wind limits dispersion and may increase PM accumulation." if wind_speed <= 2.5 else "Moderate wind has mixed dispersion effects.")
