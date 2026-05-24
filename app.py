@@ -386,7 +386,10 @@ with tab1:
     intro_note = st.text_area("Identify the main factors influencing PM10 and explain why wind speed affects accumulation.", key="intro_note")
     if st.button("Check Introduction Task"):
         ok, msg = short_env_check(intro_note, min_words=14)
-        st.success("✅ Good introductory systems reasoning.") if ok else st.warning(f"⚠ {msg}")
+        if ok:
+            st.success("✅ Good introductory systems reasoning.")
+        else:
+            st.warning(f"⚠️ {msg}")
     with st.expander("Hint / example answer"):
         st.markdown("PM10 is shaped by meteorology (wind, temperature), emission sources (traffic, heating), and energy mix (renewable share). Low wind reduces dispersion.")
 
@@ -540,10 +543,16 @@ with tab4:
 
         st.markdown("#### Decision-laboratory tasks")
         if st.button("Check Decision Task A: PM10<50 and demand<70"):
-            st.success("✅ Constraint task achieved.") if (avg_pm10 < 50 and avg_energy < 70) else st.warning("⚠ Not achieved yet. Tune temperature/wind/traffic/renewables.")
+            if avg_pm10 < 50 and avg_energy < 70:
+                st.success("✅ Constraint task achieved.")
+            else:
+                st.warning("⚠️ Not achieved yet. Tune temperature/wind/traffic/renewables.")
         if st.button("Check Decision Task B: Exceedance<10 without CO₂ increase"):
             baseline_co2 = df["CO2_emission"].median()
-            st.success("✅ Trade-off target achieved.") if (pm10_exceed_days < 10 and avg_co2 <= baseline_co2) else st.warning("⚠ Trade-off condition not yet met.")
+            if pm10_exceed_days < 10 and avg_co2 <= baseline_co2:
+                st.success("✅ Trade-off target achieved.")
+            else:
+                st.warning("⚠️ Trade-off condition not yet met.")
         st.info("Engineering note: improving one indicator does not automatically optimize the entire environmental-energy system.")
 
 with tab5:
