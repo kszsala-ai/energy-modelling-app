@@ -83,70 +83,120 @@ def _fig_to_png_bytes(fig) -> bytes:
 
 
 def build_report_pdf(context: dict) -> bytes:
-    """Generate concise 2-page educational scenario summary PDF."""
+    """Generate structured 6-page environmental-engineering laboratory report."""
     out = BytesIO()
+
+    def _footer(ax, page_no: int):
+        ax.text(0.02, 0.015, "Educational environmental-energy simulator | Synthetic dataset for teaching purposes only", fontsize=8)
+        ax.text(0.95, 0.015, f"Page {page_no}/6", fontsize=8, ha="right")
+
     with PdfPages(out) as pdf:
-        # PAGE 1: scenario summary
-        fig, ax = plt.subplots(figsize=(8.27, 11.69))
-        ax.axis("off")
-        y = 0.96
-        ax.text(0.5, y, "Environmental-Energy Scenario Summary", ha="center", va="top", fontsize=18, fontweight="bold")
-        y -= 0.05
+        # PAGE 1: Cover
+        fig, ax = plt.subplots(figsize=(8.27, 11.69)); ax.axis("off")
+        ax.text(0.5, 0.9, "Environmental-Energy Laboratory Report", ha="center", fontsize=22, fontweight="bold")
+        ax.text(0.5, 0.85, "Interactive Educational Digital Twin", ha="center", fontsize=13)
+        ax.text(0.08, 0.74, f"Scenario: {context['scenario_name']}", fontsize=12)
+        ax.text(0.08, 0.70, f"Generation date: {context['date_str']}", fontsize=12)
+        ax.text(0.08, 0.66, f"Student info: {context.get('student_info','Not provided')}", fontsize=12)
+        ax.text(0.08, 0.56, "This report summarizes environmental conditions, estimated system response,", fontsize=11)
+        ax.text(0.08, 0.53, "student task activity, and engineering conclusions.", fontsize=11)
+        _footer(ax, 1); pdf.savefig(fig, bbox_inches='tight'); plt.close(fig)
 
-        ax.text(0.03, y, "Selected Environmental Conditions", fontsize=13, fontweight="bold")
-        y -= 0.03
-        for line in [
-            f"Outdoor temperature: {context['temperature']} °C",
-            f"Wind speed: {context['wind_speed']} m/s",
-            f"Traffic intensity: {context['traffic_intensity']} %",
-            f"Renewable energy share: {context['renewable_share']} %",
-            f"Heating intensity: {context['heating']:.1f} %",
-        ]:
-            ax.text(0.05, y, f"• {line}", fontsize=10)
-            y -= 0.024
+        # PAGE 2: Methodology
+        fig, ax = plt.subplots(figsize=(8.27, 11.69)); ax.axis("off")
+        ax.text(0.03, 0.96, "Methodology", fontsize=18, fontweight="bold", va="top")
+        bullets = [
+            "Synthetic environmental-energy dataset used for educational purposes.",
+            "Time span: 2021–2023.",
+            "Temporal resolution: daily (1 record per day).",
+            "Nearest-neighbour environmental estimation (50 similar scenarios).",
+            "Educational assumptions: simplified relationships between weather, energy demand, emissions, and air quality.",
+            "Uncertainty-aware reasoning: estimated response for similar conditions, not exact deterministic prediction.",
+        ]
+        y=0.88
+        for b in bullets:
+            ax.text(0.05, y, f"• {b}", fontsize=11); y-=0.06
+        _footer(ax, 2); pdf.savefig(fig, bbox_inches='tight'); plt.close(fig)
 
-        y -= 0.02
-        ax.text(0.03, y, "Calculated Indicators", fontsize=13, fontweight="bold")
-        y -= 0.03
-        for line in [
+        # PAGE 3: Scenario analysis
+        fig, ax = plt.subplots(figsize=(8.27, 11.69)); ax.axis("off")
+        ax.text(0.03, 0.96, "Scenario Analysis", fontsize=18, fontweight="bold", va="top")
+        y=0.88
+        kpis=[
             f"Estimated PM10 concentration: {context['avg_pm10']:.1f} µg/m³",
             f"CO emission index: {context['avg_co2']:.1f}",
             f"Energy demand index: {context['avg_energy']:.1f}",
             f"Smog risk category: {str(context['risk']).capitalize()}",
-        ]:
-            ax.text(0.05, y, f"• {line}", fontsize=10)
-            y -= 0.024
+            f"Days exceeding PM10 daily limit: {context['pm10_exceed']} / 35",
+        ]
+        for k in kpis:
+            ax.text(0.05, y, f"• {k}", fontsize=11); y-=0.05
+        y-=0.03
+        ax.text(0.03, y, "Engineering interpretation", fontsize=13, fontweight="bold"); y-=0.04
+        ax.text(0.05, y, context['eng_sentence'], fontsize=10, wrap=True)
+        _footer(ax, 3); pdf.savefig(fig, bbox_inches='tight'); plt.close(fig)
 
-        y -= 0.02
-        ax.text(0.03, y, "Student Tasks", fontsize=13, fontweight="bold")
-        y -= 0.03
+        # PAGE 4: Data analysis with stats + plots + heatmap
+        fig = plt.figure(figsize=(8.27, 11.69))
+        gs = fig.add_gridspec(3,2, height_ratios=[0.45,1,1])
+        ax0=fig.add_subplot(gs[0,:]); ax0.axis('off')
+        ax0.text(0.0,0.9,"Data Analysis",fontsize=18,fontweight='bold',va='top')
+        ax0.text(0.0,0.35,"Descriptive statistics and educational plots generated from the current dataset.",fontsize=10)
+
+        ax1=fig.add_subplot(gs[1,0]);
+        stats_df=context['stats_df']
+        ax1.axis('off')
+        tbl=ax1.table(cellText=stats_df.values, colLabels=stats_df.columns, loc='center')
+        tbl.auto_set_font_size(False); tbl.set_fontsize(7); tbl.scale(1,1.2)
+        ax1.set_title("Descriptive statistics", fontsize=10)
+
+        ax2=fig.add_subplot(gs[1,1]);
+        ax2.hist(context['pm10_series'], bins=20, color='#4C78A8'); ax2.set_title("PM10 distribution", fontsize=10); ax2.set_xlabel('PM10'); ax2.set_ylabel('Count')
+        ax2.text(0.02,-0.22,"Figure: PM10 variability in synthetic records.", transform=ax2.transAxes, fontsize=8)
+
+        ax3=fig.add_subplot(gs[2,:]);
+        c=context['corr_matrix']
+        im=ax3.imshow(c.values, cmap='RdBu_r', vmin=-1, vmax=1)
+        ax3.set_xticks(range(len(c.columns))); ax3.set_xticklabels(c.columns, rotation=45, ha='right', fontsize=7)
+        ax3.set_yticks(range(len(c.index))); ax3.set_yticklabels(c.index, fontsize=7)
+        for i in range(len(c.index)):
+            for j in range(len(c.columns)):
+                ax3.text(j,i,f"{c.values[i,j]:.2f}",ha='center',va='center',fontsize=6)
+        ax3.set_title("Spearman Correlation Heatmap", fontsize=10)
+        fig.colorbar(im, ax=ax3, fraction=0.02, pad=0.02)
+        ax3.text(0.0,-0.18,"Figure: Correlation structure supports mechanism-based interpretation, not causation claims.", transform=ax3.transAxes, fontsize=8)
+        _footer(ax3, 4); pdf.savefig(fig, bbox_inches='tight'); plt.close(fig)
+
+        # PAGE 5: Student task activity
+        fig, ax = plt.subplots(figsize=(8.27, 11.69)); ax.axis('off')
+        ax.text(0.03,0.96,"Student Task Activity",fontsize=18,fontweight='bold',va='top')
+        y=0.89
         for row in context['task_rows']:
-            ax.text(0.05, y, f"• {row[0]}: {row[1]}", fontsize=10)
-            y -= 0.024
+            ax.text(0.05,y,f"Task: {row[0]}",fontsize=10,fontweight='bold'); y-=0.03
+            ax.text(0.07,y,f"Result: {row[1]}",fontsize=10); y-=0.03
+            ax.text(0.07,y,f"Interpretation: {row[2]}",fontsize=9, wrap=True); y-=0.06
+        ax.text(0.03,y,"Validation feedback",fontsize=12,fontweight='bold'); y-=0.04
+        for fb in context.get('feedback_lines', ["Task checks applied based on current scenario and interpretation quality rules."]):
+            ax.text(0.05,y,f"• {fb}",fontsize=10); y-=0.035
+        _footer(ax,5); pdf.savefig(fig, bbox_inches='tight'); plt.close(fig)
 
-        y -= 0.02
-        ax.text(0.03, y, "Student Interpretation", fontsize=13, fontweight="bold")
-        y -= 0.03
-        student_text = context.get('student_interpretation', '').strip() or 'No student interpretation provided.'
-        ax.text(0.05, y, student_text, fontsize=10, wrap=True)
-
-        ax.text(0.03, 0.02, "Educational environmental-energy simulator | Synthetic dataset for teaching purposes only", fontsize=8)
-        pdf.savefig(fig, bbox_inches='tight')
-        plt.close(fig)
-
-        # PAGE 2: rule-based interpretation
-        fig, ax = plt.subplots(figsize=(8.27, 11.69))
-        ax.axis('off')
-        y = 0.96
-        ax.text(0.5, y, "Engineering Interpretation", ha='center', va='top', fontsize=18, fontweight='bold')
-        y -= 0.06
-        for bullet in context['rule_based_points'][:6]:
-            ax.text(0.05, y, f"• {bullet}", fontsize=11)
-            y -= 0.045
-
-        ax.text(0.03, 0.02, "Educational environmental-energy simulator | Synthetic dataset for teaching purposes only", fontsize=8)
-        pdf.savefig(fig, bbox_inches='tight')
-        plt.close(fig)
+        # PAGE 6: Engineering conclusions
+        fig, ax = plt.subplots(figsize=(8.27, 11.69)); ax.axis('off')
+        ax.text(0.03,0.96,"Engineering Conclusions",fontsize=18,fontweight='bold',va='top')
+        y=0.88
+        for b in context['rule_based_points'][:6]:
+            ax.text(0.05,y,f"• {b}",fontsize=11); y-=0.055
+        y-=0.02
+        ax.text(0.03,y,"Automatic environmental assessment",fontsize=12,fontweight='bold'); y-=0.04
+        final_lines=[
+            "Meteorological conditions strongly influence pollutant dispersion.",
+            "Heating demand intensifies winter PM10 burden.",
+            "Renewable-energy transition can reduce CO/CO₂ pressure, but does not eliminate all air-quality risks.",
+            "Environmental-system response depends on interacting anthropogenic and meteorological factors.",
+        ]
+        for ln in final_lines:
+            ax.text(0.05,y,f"• {ln}",fontsize=10); y-=0.04
+        _footer(ax,6); pdf.savefig(fig, bbox_inches='tight'); plt.close(fig)
 
     out.seek(0)
     return out.read()
@@ -662,6 +712,7 @@ with tab6:
         final_conclusion = st.text_area("Write final engineering conclusions (environmental interpretation + sustainability assessment).", key="final_conclusion")
 
         st.markdown("#### Generate Environmental Report")
+        student_info = st.text_input("Student name / group (optional)", key="student_info")
         eng_sentence = (
             "Low wind speed and increased heating demand contributed to elevated PM10 concentration."
             if wind_speed <= 2.5 and calculated_heating >= 60
@@ -691,6 +742,13 @@ with tab6:
         if not rule_based_points:
             rule_based_points.append("Estimated response reflects balanced environmental and energy-system conditions.")
 
+        stats_df_pdf = df[["temperature","wind_speed","traffic_intensity","renewable_share","PM10","CO2_emission","energy_demand"]].describe().round(2).reset_index().rename(columns={"index":"stat"})
+        corr_pdf = df[["temperature","wind_speed","traffic_intensity","renewable_share","heating_intensity","PM10","CO2_emission","energy_demand"]].corr(method="spearman", numeric_only=True).round(2)
+        feedback_lines = [
+            "Interpretation length and environmental terminology checks were applied.",
+            "Advanced task requires multi-criteria score and justified scenario preference.",
+        ]
+
         pdf_context = {
             "date_str": datetime.now().strftime("%Y-%m-%d %H:%M"),
             "scenario_name": scenario_name,
@@ -709,6 +767,11 @@ with tab6:
             "rule_based_points": rule_based_points,
             "task_rows": task_rows,
             "auto_lines": auto_lines,
+            "stats_df": stats_df_pdf,
+            "pm10_series": df["PM10"].dropna().values,
+            "corr_matrix": corr_pdf,
+            "feedback_lines": feedback_lines,
+            "student_info": st.session_state.get("student_info", "Not provided"),
         }
         pdf_bytes = build_report_pdf(pdf_context)
         st.download_button("Download Environmental Report (PDF)", data=pdf_bytes, file_name="environmental_report.pdf", mime="application/pdf")
