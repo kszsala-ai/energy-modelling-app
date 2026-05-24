@@ -185,7 +185,7 @@ def safe_pct_change(ref: float, new: float) -> float:
 
 def validate_interpretation(text: str) -> tuple[bool, str]:
     keywords = {"wind", "heating", "emission", "emissions", "renewable", "pm10", "dispersion", "traffic", "co2"}
-    words = [w.strip(".,;:!?()[]{}\"\'").lower() for w in (text or "").split()]
+    words = [w.strip(".,;:!?()[]{}\"\'").lower() for w in (text or "").split() if w.strip()]
     wc = len([w for w in words if w])
     hits = sum(1 for w in words if w in keywords)
     if wc < 20:
@@ -193,6 +193,16 @@ def validate_interpretation(text: str) -> tuple[bool, str]:
     if hits < 2:
         return False, "Interpretation should reference environmental mechanisms (e.g., wind, heating, emissions, renewable, PM10, dispersion)."
     return True, "Interpretation quality check passed."
+
+
+def short_env_check(text: str, min_words: int = 12) -> tuple[bool, str]:
+    terms = {"pm10", "wind", "heating", "traffic", "renewable", "emission", "dispersion", "temperature", "co2"}
+    words = [w.strip(".,;:!?()[]{}\"\'").lower() for w in (text or "").split() if w.strip()]
+    if len(words) < min_words:
+        return False, f"Please provide at least {min_words} words."
+    if not any(w in terms for w in words):
+        return False, "Use environmental engineering terms (e.g., wind, heating, PM10, emissions, renewable, dispersion)."
+    return True, "Good: interpretation includes engineering context."
 DATA_FILE = "smog_energy_dataset.csv"
 required_columns = [
     "date", "year", "month", "temperature", "wind_speed", "heating_intensity",
@@ -322,6 +332,14 @@ with tab1:
         "This laboratory follows the same idea: it estimates environmental response from nearest scenarios rather than deterministic forecasts."
     )
 
+    st.markdown("#### Introductory tasks (BASIC)")
+    intro_note = st.text_area("Identify the main factors influencing PM10 and explain why wind speed affects accumulation.", key="intro_note")
+    if st.button("Check Introduction Task"):
+        ok, msg = short_env_check(intro_note, min_words=14)
+        st.success("✅ Good introductory systems reasoning.") if ok else st.warning(f"⚠ {msg}")
+    with st.expander("Hint / example answer"):
+        st.markdown("PM10 is shaped by meteorology (wind, temperature), emission sources (traffic, heating), and energy mix (renewable share). Low wind reduces dispersion.")
+
 with tab2:
     st.markdown("### Variables")
     a,b,c = st.columns(3)
@@ -329,7 +347,34 @@ with tab2:
     b.markdown("**Model:** heating intensity, local emission, dispersion")
     c.markdown("**Outputs:** PM10, CO₂ index, demand, smog risk")
     st.dataframe(df.head(10), use_container_width=True)
-    st.dataframe(df[["temperature","wind_speed","traffic_intensity","renewable_share","PM10","CO2_emission","energy_demand"]].describe().round(2), use_container_width=True)
+    stats_df = df[["temperature","wind_speed","traffic_intensity","renewable_share","PM10","CO2_emission","energy_demand"]].describe().round(2)
+    st.dataframe(stats_df, use_container_width=True)
+
+    st.markdown("#### EDA tasks")
+    basic_answer = st.text_input("Which variable has the highest average value?")
+    variability_answer = st.text_input("Which variable shows the highest variability (std)?")
+    if st.button("Check Dataset Tasks"):
+        means = stats_df.loc["mean"]
+        stds = stats_df.loc["std"]
+        mvar = means.idxmax().lower()
+        svar = stds.idxmax().lower()
+        score = 0
+        score += 1 if mvar.split("_")[0] in basic_answer.lower() else 0
+        score += 1 if svar.split("_")[0] in variability_answer.lower() else 0
+        if score == 2:
+            st.success("✅ Correctly identified central tendency and variability leaders.")
+        else:
+            st.warning(f"⚠ Score {score}/2. Re-check mean and std rows in the statistics table.")
+
+    st.markdown("#### Interactive statistics tools")
+    stat_var = st.selectbox("Select variable for distribution tools", ["PM10","CO2_emission","energy_demand","temperature","wind_speed","traffic_intensity","renewable_share"], key="stat_var")
+    cstat1, cstat2 = st.columns(2)
+    with cstat1:
+        st.plotly_chart(px.histogram(df, x=stat_var, nbins=25, title=f"Histogram: {stat_var}"), use_container_width=True)
+    with cstat2:
+        st.plotly_chart(px.box(df, y=stat_var, title=f"Boxplot: {stat_var}"), use_container_width=True)
+
+    stats_note = st.text_area("Interpret what these statistics and distributions mean for environmental behavior.", key="stats_note")
 
 with tab3:
     st.markdown("### Exploratory plotting laboratory")
@@ -366,6 +411,15 @@ with tab3:
                 tfig.update_traces(mode="lines+markers")
         st.plotly_chart(tfig, use_container_width=True)
 
+    st.markdown("#### Correlation analysis task")
+    corr_cols = ["temperature","wind_speed","traffic_intensity","renewable_share","heating_intensity","PM10","CO2_emission","energy_demand"]
+    corr = df[corr_cols].corr(numeric_only=True)
+    st.dataframe(corr.round(2), use_container_width=True)
+    rel_note = st.text_area("Explain one positive and one negative relationship. Why correlation does not imply causation?", key="rel_note")
+    if st.button("Check Relationship Task"):
+        ok, msg = short_env_check(rel_note, min_words=16)
+        st.success("✅ Good trend/mechanism interpretation.") if ok else st.warning(f"⚠ {msg}")
+
 with tab4:
     st.markdown("### Decision Laboratory")
     if not st.session_state.run_analysis:
@@ -394,6 +448,14 @@ with tab4:
         for i in interp:
             st.markdown(f"- {i}")
 
+        st.markdown("#### Decision-laboratory tasks")
+        if st.button("Check Decision Task A: PM10<50 and demand<70"):
+            st.success("✅ Constraint task achieved.") if (avg_pm10 < 50 and avg_energy < 70) else st.warning("⚠ Not achieved yet. Tune temperature/wind/traffic/renewables.")
+        if st.button("Check Decision Task B: Exceedance<10 without CO₂ increase"):
+            baseline_co2 = df["CO2_emission"].median()
+            st.success("✅ Trade-off target achieved.") if (pm10_exceed_days < 10 and avg_co2 <= baseline_co2) else st.warning("⚠ Trade-off condition not yet met.")
+        st.info("Engineering note: improving one indicator does not automatically optimize the entire environmental-energy system.")
+
 with tab5:
     st.markdown("### Model interpretation")
     st.markdown("**Inputs → Heating calculation → Nearest-scenario search → Environmental response estimation → Interpretation**")
@@ -405,6 +467,21 @@ with tab5:
     if candidate_inputs:
         corr = df[candidate_inputs + [output_var]].corr(numeric_only=True)[output_var].drop(output_var).abs().sort_values(ascending=True)
         st.plotly_chart(px.bar(corr, orientation="h", title=f"What most influences {output_var} in this dataset?", labels={"value":"|correlation|", "index":"variable"}), use_container_width=True)
+
+    st.markdown("#### Sensitivity analysis laboratory")
+    base = {"temperature": temperature, "wind_speed": wind_speed, "traffic_intensity": traffic_intensity, "renewable_share": renewable_share}
+    param = st.selectbox("Change one parameter", ["temperature", "wind_speed", "traffic_intensity", "renewable_share"], key="sens_param")
+    delta = st.slider("Delta", -20.0, 20.0, 2.0, 0.5, key="sens_delta")
+    changed = base.copy()
+    changed[param] = max(min(changed[param] + delta, {"temperature":25,"wind_speed":12,"traffic_intensity":100,"renewable_share":60}[param]), {"temperature":-15,"wind_speed":0,"traffic_intensity":0,"renewable_share":0}[param])
+    base_df = get_nearest_scenarios(df, float(base["temperature"]), float(base["wind_speed"]), float(base["traffic_intensity"]), float(base["renewable_share"]), 50)
+    ch_df = get_nearest_scenarios(df, float(changed["temperature"]), float(changed["wind_speed"]), float(changed["traffic_intensity"]), float(changed["renewable_share"]), 50)
+    b_pm10, c_pm10 = base_df["PM10"].mean(), ch_df["PM10"].mean()
+    b_co2, c_co2 = base_df["CO2_emission"].mean(), ch_df["CO2_emission"].mean()
+    b_dem, c_dem = base_df["energy_demand"].mean(), ch_df["energy_demand"].mean()
+    delta_tbl = pd.DataFrame({"Variable":["PM10","CO₂","Demand"],"Change":[f"{safe_pct_change(b_pm10,c_pm10):+.1f}%",f"{safe_pct_change(b_co2,c_co2):+.1f}%",f"{safe_pct_change(b_dem,c_dem):+.1f}%"]})
+    st.dataframe(delta_tbl, use_container_width=True, hide_index=True)
+    sens_note = st.text_area("Which indicator was most sensitive to this parameter change and why?", key="sens_note")
 
 with tab6:
     st.markdown("### Interactive laboratory tasks")
@@ -540,6 +617,9 @@ with tab6:
         ]
         for line in auto_lines:
             st.markdown(f"- {line}")
+
+        st.markdown("#### Final laboratory summary")
+        final_conclusion = st.text_area("Write final engineering conclusions (environmental interpretation + sustainability assessment).", key="final_conclusion")
 
         st.markdown("#### Generate Environmental Report")
         eng_sentence = (
