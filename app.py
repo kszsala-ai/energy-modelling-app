@@ -413,12 +413,52 @@ with tab3:
 
     st.markdown("#### Correlation analysis task")
     corr_cols = ["temperature","wind_speed","traffic_intensity","renewable_share","heating_intensity","PM10","CO2_emission","energy_demand"]
-    corr = df[corr_cols].corr(numeric_only=True)
-    st.dataframe(corr.round(2), use_container_width=True)
-    rel_note = st.text_area("Explain one positive and one negative relationship. Why correlation does not imply causation?", key="rel_note")
+    corr = df[corr_cols].corr(method="spearman", numeric_only=True)
+
+    heat = px.imshow(
+        corr.round(2),
+        text_auto=True,
+        aspect="auto",
+        color_continuous_scale="RdBu_r",
+        zmin=-1,
+        zmax=1,
+        title="Spearman Correlation Heatmap",
+    )
+    heat.update_layout(height=650, coloraxis_colorbar=dict(title="Spearman r"))
+    st.plotly_chart(heat, use_container_width=True)
+
+    st.info("Correlation legend: Strong |r| > 0.7, Moderate 0.4–0.7, Weak < 0.4.")
+
+    corr_no_diag = corr.where(~pd.DataFrame([[i == j for j in corr.columns] for i in corr.index], index=corr.index, columns=corr.columns))
+    max_pos = corr_no_diag.stack().idxmax()
+    max_neg = corr_no_diag.stack().idxmin()
+    max_pos_val = corr_no_diag.stack().max()
+    max_neg_val = corr_no_diag.stack().min()
+
+    auto_lines = []
+    if abs(corr.loc["heating_intensity", "PM10"]) > 0.7 and corr.loc["heating_intensity", "PM10"] > 0:
+        auto_lines.append("Heating intensity shows strong positive association with PM10.")
+    if abs(corr.loc["temperature", "energy_demand"]) > 0.7 and corr.loc["temperature", "energy_demand"] < 0:
+        auto_lines.append("Temperature is strongly negatively associated with energy demand.")
+    if not auto_lines:
+        auto_lines.append("The heatmap shows mixed relationships; interpret correlations together with physical mechanisms.")
+    for line in auto_lines:
+        st.markdown(f"- {line}")
+
+    st.markdown("**Student task:** Identify strongest positive and strongest negative correlation.")
+    pos_ans = st.text_input("Strongest positive pair (e.g., heating_intensity-PM10)", key="corr_pos_ans")
+    neg_ans = st.text_input("Strongest negative pair (e.g., temperature-energy_demand)", key="corr_neg_ans")
+    rel_note = st.text_area("Explain one environmental mechanism visible in the heatmap.", key="rel_note")
     if st.button("Check Relationship Task"):
         ok, msg = short_env_check(rel_note, min_words=16)
-        st.success("✅ Good trend/mechanism interpretation.") if ok else st.warning(f"⚠ {msg}")
+        pos_ok = all(token in pos_ans.lower() for token in [max_pos[0].lower().split('_')[0], max_pos[1].lower().split('_')[0]])
+        neg_ok = all(token in neg_ans.lower() for token in [max_neg[0].lower().split('_')[0], max_neg[1].lower().split('_')[0]])
+        if ok and pos_ok and neg_ok:
+            st.success(f"✅ Correct. Strongest positive: {max_pos[0]} vs {max_pos[1]} (r={max_pos_val:.2f}); strongest negative: {max_neg[0]} vs {max_neg[1]} (r={max_neg_val:.2f}).")
+        elif not ok:
+            st.warning(f"⚠ {msg}")
+        else:
+            st.warning(f"⚠ Re-check the extreme pairs. Current extremes are near r={max_pos_val:.2f} and r={max_neg_val:.2f}.")
 
 with tab4:
     st.markdown("### Decision Laboratory")
