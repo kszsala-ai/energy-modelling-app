@@ -10,6 +10,8 @@ from io import BytesIO
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
+APP_PASSWORD = "ENERGY2026"
+
 st.set_page_config(page_title="Environmental-Energy Decision Laboratory", page_icon="⚙️", layout="wide")
 
 st.markdown(
@@ -28,6 +30,28 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
+if not st.session_state.authenticated:
+    st.markdown("""
+    <div style='max-width:760px;margin:3rem auto;padding:2rem;border:1px solid #D1D5DB;border-radius:14px;background:#FFFFFF;'>
+      <h2 style='margin-top:0;'>AGH University of Krakow</h2>
+      <h3 style='margin-top:0.2rem;'>Environmental-Energy Teaching Laboratory</h3>
+      <p style='color:#475569;'>Restricted educational access</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    pwd = st.text_input("Password", type="password", placeholder="Enter access password")
+    if st.button("Enter Laboratory", type="primary"):
+        if pwd == APP_PASSWORD:
+            st.session_state.authenticated = True
+            st.rerun()
+        else:
+            st.error("Incorrect password. Please try again.")
+    st.stop()
+
 
 
 def heating_from_temperature(temp_c: float) -> float:
